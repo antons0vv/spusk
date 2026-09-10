@@ -40,4 +40,20 @@ describe('сетка ячеек', () => {
     const total = row.reduce((acc, c) => acc + c.rect.w, 0) + 2 * 15 + 3 * 7
     expect(total).toBeCloseTo(595.28, 6)
   })
+
+  it('поля и зазоры вычитаются по вертикали', () => {
+    const g = buildGrid(A4, 2, 1, pt(20), pt(10))
+    const expectedHeight = (841.89 - 40 - 10) / 2
+    expect(g.cells[0]?.rect.h).toBeCloseTo(expectedHeight, 6)
+    // Строка ноль — верх листа, поэтому её низ выше строки один на высоту ячейки плюс зазор.
+    expect(g.cells[0]?.rect.y).toBeCloseTo(20 + expectedHeight + 10, 6)
+    expect(g.cells[1]?.rect.y).toBeCloseTo(20, 6)
+  })
+
+  it('сумма высот ячеек, полей и зазоров равна высоте листа', () => {
+    const g = buildGrid(A4, 3, 4, pt(15), pt(7))
+    const column = g.cells.filter((c) => c.col === 0)
+    const total = column.reduce((acc, c) => acc + c.rect.h, 0) + 2 * 15 + 2 * 7
+    expect(total).toBeCloseTo(841.89, 6)
+  })
 })

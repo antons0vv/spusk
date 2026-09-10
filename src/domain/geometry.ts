@@ -21,8 +21,7 @@ export const translation = (dx: Pt, dy: Pt): Matrix => [1, 0, 0, 1, dx, dy]
 export const scaling = (s: number): Matrix => [s, 0, 0, s, pt(0), pt(0)]
 
 /** Композиция: сначала a, потом b. */
-// biome-ignore lint/suspicious/noThenProperty: функция специально называется then для API композиции матриц
-export const then = (a: Matrix, b: Matrix): Matrix => [
+export const compose = (a: Matrix, b: Matrix): Matrix => [
   a[0] * b[0] + a[1] * b[2],
   a[0] * b[1] + a[1] * b[3],
   a[2] * b[0] + a[3] * b[2],

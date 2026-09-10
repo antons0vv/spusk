@@ -13,10 +13,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
     "@types/bun": "latest",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.0"
-  },
-  "peerDependencies": {
-    "typescript": "^7.0.2"
   },
   "dependencies": {
     "mupdf": "^1.28.1",

@@ -32,10 +32,15 @@ const copyOf = (buffer: mupdf.Buffer): Uint8Array => {
 
 const contentsOf = (pageObject: mupdf.PDFObject): Uint8Array => {
   const contents = pageObject.get('Contents')
-  if (!contents.isArray()) return copyOf(contents.readStream())
+  if (contents.isStream()) return copyOf(contents.readStream())
+  if (!contents.isArray()) {
+    // Полоса без потока содержимого — обычное дело: обороты титулов, разделители,
+    // вставки из текстовых редакторов. Это пустая полоса, а не повод отменить экспорт.
+    return new Uint8Array(0)
+  }
   const parts: Uint8Array[] = []
   contents.forEach((stream) => {
-    parts.push(copyOf(stream.readStream()))
+    if (stream.isStream()) parts.push(copyOf(stream.readStream()))
   })
   return concat(parts)
 }
@@ -51,22 +56,50 @@ const composeRaw = (a: mupdf.Matrix, b: mupdf.Matrix): mupdf.Matrix => [
 
 type FormGeometry = { readonly bbox: mupdf.Rect; readonly matrix: mupdf.Matrix }
 
+/** Лист по умолчанию: его подставляет движок, когда коробки полосы пусты. */
+const LETTER: mupdf.Rect = [0, 0, 612, 792]
+
+const boxRect = (box: mupdf.PDFObject): mupdf.Rect | null => {
+  if (!box.isArray() || box.length !== 4) return null
+  const x0 = box.get(0).asNumber()
+  const y0 = box.get(1).asNumber()
+  const x1 = box.get(2).asNumber()
+  const y1 = box.get(3).asNumber()
+  if (![x0, y0, x1, y1].every((v) => Number.isFinite(v))) return null
+  return [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)]
+}
+
+const isEmptyBox = (box: mupdf.Rect): boolean => box[2] <= box[0] || box[3] <= box[1]
+
+/**
+ * Та же коробка, по которой строит трансформ полосы сам движок: CropBox,
+ * пересечённый с MediaBox. Читатель отдаёт домену координаты, отсчитанные от неё,
+ * поэтому от неё же обязан отсчитывать и писатель. Если CropBox не объявлен, он по
+ * стандарту равен MediaBox; при пустом пересечении движок подставляет Letter.
+ */
+const pageBox = (object: mupdf.PDFObject): mupdf.Rect => {
+  const media = boxRect(object.getInheritable('MediaBox')) ?? LETTER
+  const crop = boxRect(object.getInheritable('CropBox'))
+  if (crop === null) return isEmptyBox(media) ? LETTER : media
+  const clipped: mupdf.Rect = [
+    Math.max(media[0], crop[0]),
+    Math.max(media[1], crop[1]),
+    Math.min(media[2], crop[2]),
+    Math.min(media[3], crop[3]),
+  ]
+  return isEmptyBox(clipped) ? LETTER : clipped
+}
+
 /**
  * Приводит форму к той системе координат, в которой думает домен.
  * Адаптер чтения отдаёт размеры полосы уже приведёнными: начало в нуле, поворот
  * применён. Содержимое же лежит в сыром пространстве полосы. Рамка формы
  * задаётся в сыром пространстве, а матрица формы переводит её в приведённое.
+ * Рамка заодно отсекает содержимое, спрятанное кропбоксом: на готовый лист оно
+ * попасть не должно.
  */
 const formGeometry = (page: mupdf.PDFPage): FormGeometry => {
-  const box = page.getObject().getInheritable('MediaBox')
-  const bounds: mupdf.Rect = box.isArray()
-    ? [
-        Math.min(box.get(0).asNumber(), box.get(2).asNumber()),
-        Math.min(box.get(1).asNumber(), box.get(3).asNumber()),
-        Math.max(box.get(0).asNumber(), box.get(2).asNumber()),
-        Math.max(box.get(1).asNumber(), box.get(3).asNumber()),
-      ]
-    : page.getBounds('MediaBox')
+  const bounds = pageBox(page.getObject())
   const w = bounds[2] - bounds[0]
   const h = bounds[3] - bounds[1]
   const shift: mupdf.Matrix = [1, 0, 0, 1, -bounds[0], -bounds[1]]
@@ -87,7 +120,9 @@ export class MupdfWriter implements ImposedWriterPort {
 
   write(handle: DocumentHandle, plan: Plan): Result<Uint8Array, WriteError> {
     const source = this.reader.document(handle)
-    if (source === undefined) return err({ kind: 'Failed', message: 'документ закрыт' })
+    if (source === undefined) {
+      return err({ kind: 'Failed', message: 'документ закрыт или открыт другим читателем' })
+    }
 
     const target = new mupdf.PDFDocument()
     try {
@@ -112,6 +147,11 @@ export class MupdfWriter implements ImposedWriterPort {
         for (const value of geometry.matrix) matrix.push(value)
         dict.put('Matrix', matrix)
         dict.put('Resources', graft.graftObject(object.getInheritable('Resources')))
+        // Группа прозрачности переносится вместе с ресурсами: без неё блендинг и
+        // мягкие маски считаются относительно другого фона, и цвет уезжает молча —
+        // файл соберётся, дефект будет виден только на оттиске.
+        const group = object.get('Group')
+        if (!group.isNull()) dict.put('Group', graft.graftObject(group))
         const form = target.addStream(contentsOf(object), dict)
         forms.set(pageIndex, form)
         return form

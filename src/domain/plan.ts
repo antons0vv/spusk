@@ -17,9 +17,16 @@ export type PlanWarning =
   | { readonly kind: 'MixedPageSizes' }
   | { readonly kind: 'NoTrimBox'; readonly pages: number }
 
+/**
+ * Что именно не так с параметрами. Интерфейс сопоставляет этому полю действие
+ * восстановления и подсветку нужной группы контролов; строка идёт в отчёт и в тесты,
+ * но решение принимается по метке, а не по прозе.
+ */
+export type BadParameter = 'grid' | 'copies' | 'folio' | 'sheet' | 'margins' | 'document' | 'pages'
+
 export type PlanError =
   | { readonly kind: 'DoesNotFit'; readonly needed: Size; readonly available: Size }
-  | { readonly kind: 'BadParameters'; readonly message: string }
+  | { readonly kind: 'BadParameters'; readonly what: BadParameter; readonly message: string }
 
 export type Plan = {
   readonly sheetSize: Size
@@ -59,54 +66,54 @@ const SLACK = 0.01
 
 const isCount = (value: number): boolean => Number.isInteger(value) && value >= 1
 
+const isPositive = (value: number): boolean => Number.isFinite(value) && value > 0
+
+const bad = (what: BadParameter, message: string): PlanError => ({
+  kind: 'BadParameters',
+  what,
+  message,
+})
+
 const validate = (job: Job, doc: DocumentInfo): PlanError | null => {
   const { rows, cols } = gridShapeFor(job.scheme)
   if (!isCount(rows) || !isCount(cols)) {
-    return {
-      kind: 'BadParameters',
-      message: 'число строк и колонок должно быть целым и не меньше одного',
-    }
+    return bad('grid', 'число строк и колонок должно быть целым и не меньше одного')
   }
   if (job.scheme.kind === 'stepRepeat' && !isCount(job.scheme.copies)) {
-    return { kind: 'BadParameters', message: 'число копий должно быть целым и не меньше одной' }
+    return bad('copies', 'число копий должно быть целым и не меньше одной')
   }
   if (
     job.scheme.kind === 'booklet' &&
     job.scheme.folio !== 'all' &&
     (!Number.isInteger(job.scheme.folio) || job.scheme.folio < 4 || job.scheme.folio % 4 !== 0)
   ) {
-    return {
-      kind: 'BadParameters',
-      message: 'тетрадь должна быть кратна четырём и не меньше четырёх',
-    }
+    return bad('folio', 'тетрадь должна быть кратна четырём и не меньше четырёх')
   }
   if (doc.pageCount < 1) {
-    return { kind: 'BadParameters', message: 'в документе нет полос' }
+    return bad('document', 'в документе нет полос')
   }
   if (doc.pages.length !== doc.pageCount) {
-    return {
-      kind: 'BadParameters',
-      message: 'описание документа противоречиво: число полос не совпадает с числом описаний',
-    }
+    return bad(
+      'document',
+      'описание документа противоречиво: число полос не совпадает с числом описаний',
+    )
   }
-  if (
-    !Number.isFinite(job.sheet.size.w) ||
-    !Number.isFinite(job.sheet.size.h) ||
-    job.sheet.size.w <= 0 ||
-    job.sheet.size.h <= 0
-  ) {
-    return { kind: 'BadParameters', message: 'размер листа должен быть положительным' }
+  // Нулевая или нечисловая ширина полосы даёт бесконечность в масштабе и нечисло
+  // дальше по матрице, а в потоке содержимого нечисло молча становится нулём:
+  // полоса схлопнулась бы в точку, и отказа никто бы не увидел.
+  if (!doc.pages.every((p) => isPositive(p.trim.w) && isPositive(p.trim.h))) {
+    return bad('pages', 'обрезной формат полосы должен быть конечным и положительным')
+  }
+  if (!isPositive(job.sheet.size.w) || !isPositive(job.sheet.size.h)) {
+    return bad('sheet', 'размер листа должен быть положительным')
   }
   if (job.sheet.margin < 0 || job.sheet.gap < 0 || job.source.bleed < 0) {
-    return {
-      kind: 'BadParameters',
-      message: 'поля, зазоры и вылеты не могут быть отрицательными',
-    }
+    return bad('margins', 'поля, зазоры и вылеты не могут быть отрицательными')
   }
   const usableW = job.sheet.size.w - 2 * job.sheet.margin - (cols - 1) * job.sheet.gap
   const usableH = job.sheet.size.h - 2 * job.sheet.margin - (rows - 1) * job.sheet.gap
   if (usableW <= 0 || usableH <= 0) {
-    return { kind: 'BadParameters', message: 'поля и зазоры не оставляют места под полосы' }
+    return bad('margins', 'поля и зазоры не оставляют места под полосы')
   }
   return null
 }
@@ -157,7 +164,7 @@ export const plan = (job: Job, doc: DocumentInfo): Result<Plan, PlanError> => {
   const first = grid.cells[0]
   const reference = geometry[0]
   if (first === undefined || reference === undefined) {
-    return err({ kind: 'BadParameters', message: 'сетка не дала ни одной ячейки' })
+    return err(bad('grid', 'сетка не дала ни одной ячейки'))
   }
 
   if (job.source.scaling === 'actual') {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { rect, size } from './geometry.js'
+import { type Rect, rect, size } from './geometry.js'
 import type { DocumentInfo, Job } from './job.js'
-import { plan } from './plan.js'
+import { type BadParameter, plan } from './plan.js'
 import { isErr, isOk } from './result.js'
 import { mm, pt } from './units.js'
 
@@ -219,17 +219,54 @@ describe('планировщик', () => {
     expect(stack.value.padding).toBe(0)
   })
 
-  it('противоречивые параметры отвергаются', () => {
-    const cases: readonly Job[] = [
-      bookletJob({ scheme: { kind: 'nup', rows: 2.5, cols: 2, fill: 'rows' } }),
-      bookletJob({ scheme: { kind: 'stepRepeat', rows: 2, cols: 2, copies: 0 } }),
-      bookletJob({ sheet: { size: size(841.89, 595.28), margin: pt(500), gap: pt(0) } }),
-      bookletJob({ source: { bleed: pt(-1), scaling: 'fit', normalizeSizes: false } }),
+  it('противоречивые параметры отвергаются и называют, что именно не так', () => {
+    const cases: readonly (readonly [Job, BadParameter])[] = [
+      [bookletJob({ scheme: { kind: 'nup', rows: 2.5, cols: 2, fill: 'rows' } }), 'grid'],
+      [bookletJob({ scheme: { kind: 'stepRepeat', rows: 2, cols: 2, copies: 0 } }), 'copies'],
+      [
+        bookletJob({
+          scheme: { kind: 'booklet', folio: 6, binding: 'left', creepPerSheet: pt(0) },
+        }),
+        'folio',
+      ],
+      [bookletJob({ sheet: { size: size(0, 595.28), margin: pt(0), gap: pt(0) } }), 'sheet'],
+      [
+        bookletJob({ sheet: { size: size(841.89, 595.28), margin: pt(500), gap: pt(0) } }),
+        'margins',
+      ],
+      [bookletJob({ source: { bleed: pt(-1), scaling: 'fit', normalizeSizes: false } }), 'margins'],
     ]
-    for (const job of cases) {
+    for (const [job, what] of cases) {
       const r = plan(job, doc(4))
       expect(isErr(r)).toBe(true)
-      if (isErr(r)) expect(r.error.kind).toBe('BadParameters')
+      if (isErr(r) && r.error.kind === 'BadParameters') {
+        expect(r.error.what).toBe(what)
+        expect(r.error.message.length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('полоса с нулевым или нечисловым обрезным форматом отвергается', () => {
+    const broken: readonly Rect[] = [
+      rect(0, 0, 0, 595.28),
+      rect(0, 0, 419.53, 0),
+      rect(0, 0, Number.NaN, 595.28),
+      rect(0, 0, 419.53, Number.POSITIVE_INFINITY),
+      rect(0, 0, -419.53, 595.28),
+    ]
+    for (const trim of broken) {
+      const damaged: DocumentInfo = {
+        pageCount: 2,
+        // Вторая полоса целая: отказ обязан прийти и из-за одной испорченной.
+        pages: [
+          { trim, media: rect(0, 0, 419.53, 595.28), hasTrimBox: true },
+          { ...A5, hasTrimBox: true },
+        ],
+        uniformSize: null,
+      }
+      const r = plan(bookletJob(), damaged)
+      expect(isErr(r)).toBe(true)
+      if (isErr(r) && r.error.kind === 'BadParameters') expect(r.error.what).toBe('pages')
     }
   })
 

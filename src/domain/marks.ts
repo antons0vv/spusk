@@ -43,21 +43,29 @@ const cropMarksFor = (trim: Rect, length: Pt, offset: Pt, pen: Pt) => {
   ]
 }
 
+/**
+ * Линия сгиба идёт по границе соседних ячеек, а не по доле листа: доли совпадают
+ * с ячейками только при двух колонках, при трёх и больше метка уехала бы от реального
+ * стыка. При ненулевом зазоре граница — середина зазора.
+ */
 const foldMarksFor = (grid: Grid, sheetSize: Size, margin: Pt, length: Pt, pen: Pt) => {
   const marks: ResolvedMark[] = []
+  const reach = Math.min(margin, length)
   for (let col = 1; col < grid.cols; col += 1) {
-    const x = (sheetSize.w * col) / grid.cols
-    marks.push(line(point(x, 0), point(x, Math.min(margin, length)), pen, FOLD_DASH))
-    marks.push(
-      line(point(x, sheetSize.h - Math.min(margin, length)), point(x, sheetSize.h), pen, FOLD_DASH),
-    )
+    const before = grid.cells[col - 1]
+    const after = grid.cells[col]
+    if (before === undefined || after === undefined) continue
+    const x = (before.rect.x + before.rect.w + after.rect.x) / 2
+    marks.push(line(point(x, 0), point(x, reach), pen, FOLD_DASH))
+    marks.push(line(point(x, sheetSize.h - reach), point(x, sheetSize.h), pen, FOLD_DASH))
   }
   for (let row = 1; row < grid.rows; row += 1) {
-    const y = (sheetSize.h * row) / grid.rows
-    marks.push(line(point(0, y), point(Math.min(margin, length), y), pen, FOLD_DASH))
-    marks.push(
-      line(point(sheetSize.w - Math.min(margin, length), y), point(sheetSize.w, y), pen, FOLD_DASH),
-    )
+    const above = grid.cells[(row - 1) * grid.cols]
+    const below = grid.cells[row * grid.cols]
+    if (above === undefined || below === undefined) continue
+    const y = (above.rect.y + below.rect.y + below.rect.h) / 2
+    marks.push(line(point(0, y), point(reach, y), pen, FOLD_DASH))
+    marks.push(line(point(sheetSize.w - reach, y), point(sheetSize.w, y), pen, FOLD_DASH))
   }
   return marks
 }
@@ -84,9 +92,11 @@ export const resolveMarks = (
 ): readonly ResolvedMark[] =>
   specs.flatMap((spec) => {
     if (spec.kind === 'crop') {
-      return sheet.placements.flatMap((p) =>
-        cropMarksFor(p.trim, spec.length, spec.offset, spec.pen),
-      )
+      // Пустой слот резать нечего: на неполном последнем листе метки вокруг пустоты
+      // только сбивают резчика. Фальцовка и приводка относятся к листу целиком.
+      return sheet.placements
+        .filter((p) => p.source.kind === 'page')
+        .flatMap((p) => cropMarksFor(p.trim, spec.length, spec.offset, spec.pen))
     }
     if (spec.kind === 'fold') {
       return foldMarksFor(grid, sheetSize, margin, spec.length, spec.pen)

@@ -5,11 +5,18 @@ import type {
   OpenError,
   OpenedDocument,
 } from '../../application/ports.js'
-import { rect, size } from '../../domain/geometry.js'
+import { type Rect, rect, size } from '../../domain/geometry.js'
 import type { DocumentInfo, SourcePage } from '../../domain/job.js'
 import { err, ok, type Result } from '../../domain/result.js'
 
-const rectFrom = (box: mupdf.Rect) => rect(box[0], box[1], box[2] - box[0], box[3] - box[1])
+/**
+ * Движок отдаёт коробки полосы в своём пространстве: начало в левом верхнем углу
+ * приведённой полосы, ось Y вниз. Домен и писатель считают в пространстве PDF:
+ * начало внизу слева, ось Y вверх. Переворот делается здесь, на границе адаптера,
+ * иначе полоса со смещённым TrimBox уехала бы по вертикали на разницу отступов.
+ */
+const rectFrom = (box: mupdf.Rect, pageHeight: number): Rect =>
+  rect(box[0], pageHeight - box[3], box[2] - box[0], box[3] - box[1])
 
 const describe = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause)
@@ -22,9 +29,12 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
   for (let i = 0; i < doc.countPages(); i += 1) {
     const page = doc.loadPage(i)
     const hasTrimBox = !page.getObject().get('TrimBox').isNull()
+    // Приведённая полоса: движок строит её по CropBox, пересечённому с MediaBox,
+    // и от неё же отсчитывает остальные коробки.
+    const height = page.getBounds()[3]
     pages.push({
-      trim: rectFrom(page.getBounds(hasTrimBox ? 'TrimBox' : 'CropBox')),
-      media: rectFrom(page.getBounds('MediaBox')),
+      trim: rectFrom(page.getBounds(hasTrimBox ? 'TrimBox' : 'CropBox'), height),
+      media: rectFrom(page.getBounds('MediaBox'), height),
       hasTrimBox,
     })
   }
@@ -41,8 +51,17 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
   }
 }
 
+let readersCreated = 0
+
+/** Каждому читателю своё происхождение: по нему дескриптор узнаёт своего хозяина. */
+const nextOrigin = (): string => {
+  readersCreated += 1
+  return `mupdf-reader-${readersCreated}`
+}
+
 /** Читает PDF через mupdf. Документ остаётся открытым до вызова close. */
 export class MupdfReader implements DocumentReaderPort {
+  private readonly origin = nextOrigin()
   private nextId = 1
   private readonly open_ = new Map<number, mupdf.PDFDocument>()
 
@@ -61,22 +80,27 @@ export class MupdfReader implements DocumentReaderPort {
       return err({ kind: 'NotAPdf' })
     }
     if (doc.needsPassword()) {
-      doc.destroy()
-      return err({ kind: 'Encrypted' })
+      // Описание защищённого документа до расшифровки не построить, но дескриптор
+      // нужен уже сейчас: без него пароль было бы некуда прислать.
+      return err({ kind: 'PasswordRequired', handle: this.keep(doc) })
     }
+    let info: DocumentInfo
     try {
-      return ok(this.register(doc))
+      // Описание считается до записи в хранилище: если обход полос упадёт,
+      // в хранилище не останется документа, который некому закрыть.
+      info = infoFrom(doc)
     } catch (cause) {
       // Документ распарсился, но дерево полос оказалось повреждено.
       doc.destroy()
       return err({ kind: 'Unreadable', message: describe(cause) })
     }
+    return ok({ handle: this.keep(doc), info })
   }
 
   authenticate(handle: DocumentHandle, password: string): Result<OpenedDocument, OpenError> {
-    const doc = this.open_.get(handle.id)
+    const doc = this.held(handle)
     if (doc === undefined) return err({ kind: 'Unreadable', message: 'документ уже закрыт' })
-    if (doc.authenticatePassword(password) === 0) return err({ kind: 'Encrypted' })
+    if (doc.authenticatePassword(password) === 0) return err({ kind: 'WrongPassword', handle })
     try {
       return ok({ handle, info: infoFrom(doc) })
     } catch (cause) {
@@ -85,7 +109,7 @@ export class MupdfReader implements DocumentReaderPort {
   }
 
   close(handle: DocumentHandle): void {
-    const doc = this.open_.get(handle.id)
+    const doc = this.held(handle)
     if (doc === undefined) return
     doc.destroy()
     this.open_.delete(handle.id)
@@ -93,16 +117,21 @@ export class MupdfReader implements DocumentReaderPort {
 
   /** Внутренний доступ для писателя: тот же документ, без повторного разбора. */
   document(handle: DocumentHandle): mupdf.PDFDocument | undefined {
-    return this.open_.get(handle.id)
+    return this.held(handle)
   }
 
-  private register(doc: mupdf.PDFDocument): OpenedDocument {
-    // Описание считается до записи в хранилище: если обход полос упадёт,
-    // в хранилище не останется документа, который некому закрыть.
-    const info = infoFrom(doc)
+  /** Кладёт документ в хранилище и выдаёт помеченный дескриптор. */
+  private keep(doc: mupdf.PDFDocument): DocumentHandle {
     const id = this.nextId
     this.nextId += 1
     this.open_.set(id, doc)
-    return { handle: { id }, info }
+    return { origin: this.origin, id }
+  }
+
+  private held(handle: DocumentHandle): mupdf.PDFDocument | undefined {
+    // Дескриптор чужого читателя не открывает чужой документ: номера у читателей
+    // независимы и наверняка пересекаются.
+    if (handle.origin !== this.origin) return undefined
+    return this.open_.get(handle.id)
   }
 }

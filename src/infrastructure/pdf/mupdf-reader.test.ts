@@ -1,9 +1,23 @@
+import * as mupdf from 'mupdf'
 import { describe, expect, it } from 'vitest'
 import { makeNumberedPdf } from '../../../test/fixtures/make-pdf.js'
 import { isErr, isOk } from '../../domain/result.js'
 import { MupdfReader } from './mupdf-reader.js'
 
 const reader = new MupdfReader()
+
+/** Пересобирает фикстуру зашифрованной: своего шифровальщика в проекте нет. */
+const underPassword = (bytes: Uint8Array, password: string): Uint8Array => {
+  const doc = mupdf.Document.openDocument(bytes, 'application/pdf').asPDF()
+  if (doc === null) throw new Error('фикстура не PDF')
+  const buffer = doc.saveToBuffer(
+    `encrypt=aes-256,user-password=${password},owner-password=${password}`,
+  )
+  const copy = new Uint8Array(buffer.asUint8Array())
+  buffer.destroy()
+  doc.destroy()
+  return copy
+}
 
 describe('чтение документа', () => {
   it('читает число полос и размеры', () => {
@@ -36,6 +50,51 @@ describe('чтение документа', () => {
     const r = reader.open(new TextEncoder().encode('это не pdf'))
     expect(isErr(r)).toBe(true)
     if (isErr(r)) expect(r.error.kind).toBe('NotAPdf')
+  })
+
+  it('защищённый документ отдаёт дескриптор вместе с требованием пароля', () => {
+    const bytes = underPassword(makeNumberedPdf({ pageCount: 3, width: 300, height: 400 }), 'слово')
+    const r = reader.open(bytes)
+    expect(isErr(r)).toBe(true)
+    if (!isErr(r) || r.error.kind !== 'PasswordRequired') throw new Error('ждали PasswordRequired')
+
+    // Неверный пароль — отдельное состояние: поле ввода показывается повторно.
+    const wrong = reader.authenticate(r.error.handle, 'не то')
+    expect(isErr(wrong)).toBe(true)
+    if (isErr(wrong)) expect(wrong.error.kind).toBe('WrongPassword')
+
+    const right = reader.authenticate(r.error.handle, 'слово')
+    if (!isOk(right)) throw new Error('пароль не подошёл')
+    expect(right.value.info.pageCount).toBe(3)
+    expect(right.value.info.uniformSize?.w).toBeCloseTo(300, 3)
+    reader.close(right.value.handle)
+  })
+
+  it('закрытый документ больше не расшифровать', () => {
+    const bytes = underPassword(makeNumberedPdf({ pageCount: 1, width: 300, height: 400 }), 'ключ')
+    const r = reader.open(bytes)
+    if (!isErr(r) || r.error.kind !== 'PasswordRequired') throw new Error('ждали PasswordRequired')
+    reader.close(r.error.handle)
+    const after = reader.authenticate(r.error.handle, 'ключ')
+    expect(isErr(after)).toBe(true)
+    if (isErr(after)) expect(after.error.kind).toBe('Unreadable')
+  })
+
+  it('дескриптор помечен своим читателем и чужому не отвечает', () => {
+    const one = new MupdfReader()
+    const other = new MupdfReader()
+    const mine = one.open(makeNumberedPdf({ pageCount: 2, width: 300, height: 400 }))
+    const theirs = other.open(makeNumberedPdf({ pageCount: 5, width: 300, height: 400 }))
+    if (!isOk(mine) || !isOk(theirs)) throw new Error('документ не открылся')
+    // Номера у двух читателей совпадают, различает их только происхождение.
+    expect(theirs.value.handle.id).toBe(mine.value.handle.id)
+    expect(theirs.value.handle.origin).not.toBe(mine.value.handle.origin)
+    expect(other.document(mine.value.handle)).toBeUndefined()
+    // Закрытие чужим читателем не трогает документ: свой читатель им ещё пользуется.
+    other.close(mine.value.handle)
+    expect(one.document(mine.value.handle)).toBeDefined()
+    one.close(mine.value.handle)
+    other.close(theirs.value.handle)
   })
 
   it('обрезанный файл всё равно открывается', () => {

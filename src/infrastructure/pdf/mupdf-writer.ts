@@ -3,7 +3,7 @@ import type { DocumentHandle, ImposedWriterPort, WriteError } from '../../applic
 import type { Placement } from '../../domain/assemble.js'
 import type { Plan } from '../../domain/plan.js'
 import { err, ok, type Result } from '../../domain/result.js'
-import { placementOps } from './content-stream.js'
+import { markOps, placementOps } from './content-stream.js'
 import type { MupdfReader } from './mupdf-reader.js'
 
 const concat = (parts: readonly Uint8Array[]): Uint8Array => {
@@ -129,7 +129,8 @@ export class MupdfWriter implements ImposedWriterPort {
           ops.push(placementOps(name, placement))
         })
         resources.put('XObject', xobjects)
-        target.insertPage(-1, target.addPage(mediabox, 0, resources, ops.join('\n')))
+        const content = [ops.join('\n'), markOps(sheet.marks)].filter((s) => s !== '').join('\n')
+        target.insertPage(-1, target.addPage(mediabox, 0, resources, content))
       }
 
       // Коробки листа: обрезной и полезный формат совпадают с форматом листа,

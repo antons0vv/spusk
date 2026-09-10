@@ -105,4 +105,16 @@ describe('писатель', () => {
     expect(bytes.byteLength).toBeGreaterThan(0)
     expect(readBack(bytes)).toHaveLength(2)
   })
+
+  it('метки реза попадают в файл и не ломают его', () => {
+    const job: Job = {
+      ...bookletJob(),
+      sheet: { size: size(841.89, 595.28), margin: mm(10), gap: pt(0) },
+      source: { bleed: mm(3), scaling: 'fit', normalizeSizes: false },
+      marks: [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2) }],
+    }
+    const sheets = readBack(imposed(4, job))
+    expect(sheets).toHaveLength(2)
+    expect(sheets[0]?.labels.some((l) => l.text.includes('P1'))).toBe(true)
+  })
 })

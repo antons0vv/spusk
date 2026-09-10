@@ -19,15 +19,67 @@ const concat = (parts: readonly Uint8Array[]): Uint8Array => {
   return out
 }
 
+/**
+ * Представление буфера указывает прямо в кучу движка и обесценивается при
+ * следующей же аллокации, а сам буфер иначе никто не освободит. Поэтому
+ * копируем немедленно.
+ */
+const copyOf = (buffer: mupdf.Buffer): Uint8Array => {
+  const copy = new Uint8Array(buffer.asUint8Array())
+  buffer.destroy()
+  return copy
+}
+
 const contentsOf = (pageObject: mupdf.PDFObject): Uint8Array => {
   const contents = pageObject.get('Contents')
-  if (!contents.isArray()) return contents.readStream().asUint8Array()
+  if (!contents.isArray()) return copyOf(contents.readStream())
   const parts: Uint8Array[] = []
   contents.forEach((stream) => {
-    parts.push(stream.readStream().asUint8Array())
+    parts.push(copyOf(stream.readStream()))
   })
   return concat(parts)
 }
+
+const composeRaw = (a: mupdf.Matrix, b: mupdf.Matrix): mupdf.Matrix => [
+  a[0] * b[0] + a[1] * b[2],
+  a[0] * b[1] + a[1] * b[3],
+  a[2] * b[0] + a[3] * b[2],
+  a[2] * b[1] + a[3] * b[3],
+  a[4] * b[0] + a[5] * b[2] + b[4],
+  a[4] * b[1] + a[5] * b[3] + b[5],
+]
+
+type FormGeometry = { readonly bbox: mupdf.Rect; readonly matrix: mupdf.Matrix }
+
+/**
+ * Приводит форму к той системе координат, в которой думает домен.
+ * Адаптер чтения отдаёт размеры полосы уже приведёнными: начало в нуле, поворот
+ * применён. Содержимое же лежит в сыром пространстве полосы. Рамка формы
+ * задаётся в сыром пространстве, а матрица формы переводит её в приведённое.
+ */
+const formGeometry = (page: mupdf.PDFPage): FormGeometry => {
+  const box = page.getObject().getInheritable('MediaBox')
+  const bounds: mupdf.Rect = box.isArray()
+    ? [
+        Math.min(box.get(0).asNumber(), box.get(2).asNumber()),
+        Math.min(box.get(1).asNumber(), box.get(3).asNumber()),
+        Math.max(box.get(0).asNumber(), box.get(2).asNumber()),
+        Math.max(box.get(1).asNumber(), box.get(3).asNumber()),
+      ]
+    : page.getBounds('MediaBox')
+  const w = bounds[2] - bounds[0]
+  const h = bounds[3] - bounds[1]
+  const shift: mupdf.Matrix = [1, 0, 0, 1, -bounds[0], -bounds[1]]
+  const spun = page.getObject().getInheritable('Rotate')
+  const rotate = spun.isNumber() ? ((spun.asNumber() % 360) + 360) % 360 : 0
+  if (rotate === 90) return { bbox: bounds, matrix: composeRaw(shift, [0, -1, 1, 0, 0, w]) }
+  if (rotate === 180) return { bbox: bounds, matrix: composeRaw(shift, [-1, 0, 0, -1, w, h]) }
+  if (rotate === 270) return { bbox: bounds, matrix: composeRaw(shift, [0, 1, -1, 0, h, 0]) }
+  return { bbox: bounds, matrix: shift }
+}
+
+const describe = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause)
 
 /** Исполняет план: переносит исходные полосы формами XObject на новые листы. */
 export class MupdfWriter implements ImposedWriterPort {
@@ -37,8 +89,10 @@ export class MupdfWriter implements ImposedWriterPort {
     const source = this.reader.document(handle)
     if (source === undefined) return err({ kind: 'Failed', message: 'документ закрыт' })
 
+    const target = new mupdf.PDFDocument()
     try {
-      const target = new mupdf.PDFDocument()
+      // Карта переноса одна на весь экспорт: иначе общие шрифты и изображения
+      // продублируются на каждом листе и файл распухнет в разы.
       const graft = target.newGraftMap()
       const forms = new Map<number, mupdf.PDFObject>()
 
@@ -47,13 +101,16 @@ export class MupdfWriter implements ImposedWriterPort {
         if (cached !== undefined) return cached
         const page = source.loadPage(pageIndex)
         const object = page.getObject()
-        const bounds = page.getBounds('MediaBox')
+        const geometry = formGeometry(page)
         const dict = target.newDictionary()
         dict.put('Type', target.newName('XObject'))
         dict.put('Subtype', target.newName('Form'))
         const bbox = target.newArray()
-        for (const value of bounds) bbox.push(value)
+        for (const value of geometry.bbox) bbox.push(value)
         dict.put('BBox', bbox)
+        const matrix = target.newArray()
+        for (const value of geometry.matrix) matrix.push(value)
+        dict.put('Matrix', matrix)
         dict.put('Resources', graft.graftObject(object.getInheritable('Resources')))
         const form = target.addStream(contentsOf(object), dict)
         forms.set(pageIndex, form)
@@ -83,14 +140,13 @@ export class MupdfWriter implements ImposedWriterPort {
         sheetPage.setPageBox('TrimBox', mediabox)
       }
 
-      const bytes = target.saveToBuffer('compress').asUint8Array()
-      target.destroy()
-      return ok(bytes)
+      return ok(copyOf(target.saveToBuffer('compress')))
     } catch (cause) {
-      return err({
-        kind: 'Failed',
-        message: cause instanceof Error ? cause.message : String(cause),
-      })
+      return err({ kind: 'Failed', message: describe(cause) })
+    } finally {
+      // Освобождать надо и на отказе: иначе документ-цель вместе со всеми
+      // перенесёнными ресурсами повиснет до недетерминированной уборки.
+      target.destroy()
     }
   }
 }

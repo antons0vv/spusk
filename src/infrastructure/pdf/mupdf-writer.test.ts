@@ -19,8 +19,14 @@ const bookletJob = (): Job => ({
   marks: [],
 })
 
-const imposed = (pageCount: number, job: Job): Uint8Array => {
-  const opened = reader.open(makeNumberedPdf({ pageCount, width: 419.53, height: 595.28 }))
+const imposed = (
+  pageCount: number,
+  job: Job,
+  extra: { origin?: number; rotate?: number } = {},
+): Uint8Array => {
+  const opened = reader.open(
+    makeNumberedPdf({ pageCount, width: 419.53, height: 595.28, ...extra }),
+  )
   if (!isOk(opened)) throw new Error('документ не открылся')
   const built = plan(job, opened.value.info)
   if (!isOk(built)) throw new Error('план не построен')
@@ -64,6 +70,29 @@ describe('писатель', () => {
     expect(cellOf(first, 2, 2, 'bottom-P5')).toEqual({ row: 0, col: 1 })
     expect(cellOf(first, 2, 2, 'bottom-P9')).toEqual({ row: 1, col: 0 })
     expect(cellOf(first, 2, 2, 'bottom-P13')).toEqual({ row: 1, col: 1 })
+  })
+
+  it('полоса со смещённым началом координат ложится в свою ячейку', () => {
+    const sheets = readBack(imposed(4, bookletJob(), { origin: 40 }))
+    const first = sheets[0]
+    if (first === undefined) throw new Error('нет листа')
+    expect(cellOf(first, 1, 2, 'bottom-P4')).toEqual({ row: 0, col: 0 })
+    expect(cellOf(first, 1, 2, 'bottom-P1')).toEqual({ row: 0, col: 1 })
+  })
+
+  it('повёрнутая полоса ложится повёрнутой, а не как есть', () => {
+    const job: Job = {
+      ...bookletJob(),
+      sheet: { size: size(1190.55, 841.89), margin: pt(0), gap: pt(0) },
+      source: { bleed: pt(0), scaling: 'fit', normalizeSizes: false },
+    }
+    const sheets = readBack(imposed(4, job, { rotate: 90 }))
+    const first = sheets[0]
+    if (first === undefined) throw new Error('нет листа')
+    expect(cellOf(first, 1, 2, 'bottom-P4')).toEqual({ row: 0, col: 0 })
+    // Метка низа полосы после поворота по часовой стрелке оказывается вверху листа.
+    // Без поворота она осталась бы внизу, поэтому строка здесь и различает случаи.
+    expect(cellOf(first, 2, 2, 'bottom-P4')).toEqual({ row: 0, col: 0 })
   })
 
   it('вылет обрезается по границе клипа', () => {

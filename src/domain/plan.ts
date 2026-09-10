@@ -1,8 +1,8 @@
-import { assemble, type Sheet } from './assemble.js'
+import { assemble, type PageGeometry, type Sheet } from './assemble.js'
 import { applyCreep, creepShift } from './creep.js'
-import type { Size } from './geometry.js'
+import { rect, type Size } from './geometry.js'
 import { buildGrid } from './grid.js'
-import type { DocumentInfo, Job, Scheme } from './job.js'
+import type { DocumentInfo, Job, Scheme, SourcePage } from './job.js'
 import { resolveMarks } from './marks.js'
 import { bookletOrder } from './order/booklet.js'
 import { cutStackOrder } from './order/cut-stack.js'
@@ -10,6 +10,7 @@ import { nupOrder } from './order/nup.js'
 import { stepRepeatOrder } from './order/step-repeat.js'
 import { err, ok, type Result } from './result.js'
 import type { Side } from './slots.js'
+import { pt } from './units.js'
 
 export type PlanWarning =
   | { readonly kind: 'PaddedToFolio'; readonly added: number }
@@ -47,18 +48,26 @@ const orderFor = (scheme: Scheme, pageCount: number): readonly Side[] => {
   }
 }
 
+/** Допуск на сравнение вещественных размеров: доли пункта различием не считаем. */
+const SLACK = 1e-6
+
+const isCount = (value: number): boolean => Number.isInteger(value) && value >= 1
+
 const validate = (job: Job, doc: DocumentInfo): PlanError | null => {
   const { rows, cols } = gridShapeFor(job.scheme)
-  if (rows < 1 || cols < 1) {
-    return { kind: 'BadParameters', message: 'число строк и колонок должно быть не меньше одной' }
+  if (!isCount(rows) || !isCount(cols)) {
+    return {
+      kind: 'BadParameters',
+      message: 'число строк и колонок должно быть целым и не меньше одного',
+    }
   }
-  if (job.scheme.kind === 'stepRepeat' && job.scheme.copies < 1) {
-    return { kind: 'BadParameters', message: 'число копий должно быть не меньше одной' }
+  if (job.scheme.kind === 'stepRepeat' && !isCount(job.scheme.copies)) {
+    return { kind: 'BadParameters', message: 'число копий должно быть целым и не меньше одной' }
   }
   if (
     job.scheme.kind === 'booklet' &&
     job.scheme.folio !== 'all' &&
-    (job.scheme.folio < 4 || job.scheme.folio % 4 !== 0)
+    (!Number.isInteger(job.scheme.folio) || job.scheme.folio < 4 || job.scheme.folio % 4 !== 0)
   ) {
     return {
       kind: 'BadParameters',
@@ -68,7 +77,54 @@ const validate = (job: Job, doc: DocumentInfo): PlanError | null => {
   if (doc.pageCount < 1) {
     return { kind: 'BadParameters', message: 'в документе нет полос' }
   }
+  if (doc.pages.length !== doc.pageCount) {
+    return {
+      kind: 'BadParameters',
+      message: 'описание документа противоречиво: число полос не совпадает с числом описаний',
+    }
+  }
+  if (
+    !Number.isFinite(job.sheet.size.w) ||
+    !Number.isFinite(job.sheet.size.h) ||
+    job.sheet.size.w <= 0 ||
+    job.sheet.size.h <= 0
+  ) {
+    return { kind: 'BadParameters', message: 'размер листа должен быть положительным' }
+  }
+  if (job.sheet.margin < 0 || job.sheet.gap < 0 || job.source.bleed < 0) {
+    return {
+      kind: 'BadParameters',
+      message: 'поля, зазоры и вылеты не могут быть отрицательными',
+    }
+  }
+  const usableW = job.sheet.size.w - 2 * job.sheet.margin - (cols - 1) * job.sheet.gap
+  const usableH = job.sheet.size.h - 2 * job.sheet.margin - (rows - 1) * job.sheet.gap
+  if (usableW <= 0 || usableH <= 0) {
+    return { kind: 'BadParameters', message: 'поля и зазоры не оставляют места под полосы' }
+  }
   return null
+}
+
+/**
+ * Приводит полосы к общему обрезному формату, если включено выравнивание.
+ * Каждая полоса центрируется внутри самого большого формата, поэтому
+ * разноразмерный документ раскладывается без разъезда.
+ */
+const geometryOf = (pages: readonly SourcePage[], normalize: boolean): readonly PageGeometry[] => {
+  const plain = pages.map((p) => ({ trim: p.trim, media: p.media }))
+  if (!normalize) return plain
+  const maxW = Math.max(...plain.map((p) => p.trim.w))
+  const maxH = Math.max(...plain.map((p) => p.trim.h))
+  return plain.map((p) => ({
+    media: p.media,
+    trim: rect(p.trim.x + (p.trim.w - maxW) / 2, p.trim.y + (p.trim.h - maxH) / 2, maxW, maxH),
+  }))
+}
+
+/** При переплёте справа развороты зеркалятся: первая полоса оказывается справа. */
+const mirrorIfRightBound = (sides: readonly Side[], scheme: Scheme): readonly Side[] => {
+  if (scheme.kind !== 'booklet' || scheme.binding !== 'right') return sides
+  return sides.map((side) => ({ ...side, slots: [...side.slots].reverse() }))
 }
 
 const warningsFor = (job: Job, doc: DocumentInfo, padding: number): readonly PlanWarning[] => {
@@ -91,37 +147,38 @@ export const plan = (job: Job, doc: DocumentInfo): Result<Plan, PlanError> => {
 
   const { rows, cols } = gridShapeFor(job.scheme)
   const grid = buildGrid(job.sheet.size, rows, cols, job.sheet.margin, job.sheet.gap)
+  const geometry = geometryOf(doc.pages, job.source.normalizeSizes)
   const first = grid.cells[0]
-  const reference = doc.pages[0]
+  const reference = geometry[0]
   if (first === undefined || reference === undefined) {
-    return err({ kind: 'BadParameters', message: 'пустая сетка или пустой документ' })
+    return err({ kind: 'BadParameters', message: 'сетка не дала ни одной ячейки' })
   }
 
   if (job.source.scaling === 'actual') {
-    const needs = doc.pages.some(
-      (p) => p.trim.w > first.rect.w + 1e-6 || p.trim.h > first.rect.h + 1e-6,
-    )
-    if (needs) {
+    const neededW = Math.max(...geometry.map((p) => p.trim.w))
+    const neededH = Math.max(...geometry.map((p) => p.trim.h))
+    if (neededW > first.rect.w + SLACK || neededH > first.rect.h + SLACK) {
       return err({
         kind: 'DoesNotFit',
-        needed: { w: reference.trim.w, h: reference.trim.h },
+        needed: { w: pt(neededW), h: pt(neededH) },
         available: { w: first.rect.w, h: first.rect.h },
       })
     }
   }
 
-  const sides = orderFor(job.scheme, doc.pageCount)
+  const sides = mirrorIfRightBound(orderFor(job.scheme, doc.pageCount), job.scheme)
   const usedSlots = sides.reduce((acc, s) => acc + s.slots.length, 0)
-  const placedPages = sides.flatMap((s) => s.slots).filter((s) => s.kind === 'page').length
+  const placedPages = sides.reduce(
+    (acc, s) => acc + s.slots.filter((slot) => slot.kind === 'page').length,
+    0,
+  )
   const padding = job.scheme.kind === 'booklet' ? usedSlots - placedPages : 0
 
-  const geometry = doc.pages.map((p) => ({ trim: p.trim, media: p.media }))
-  const referenceGeometry = { trim: reference.trim, media: reference.media }
   const assembled = assemble(
     sides,
     grid,
     geometry,
-    referenceGeometry,
+    reference,
     { bleed: job.source.bleed, scaling: job.source.scaling },
     job.sheet.margin,
     job.sheet.gap,

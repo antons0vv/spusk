@@ -28,13 +28,17 @@ describe('планировщик', () => {
     if (isOk(r)) expect(r.value.sheets).toHaveLength(8)
   })
 
-  it('выползание нарастает от внешнего листа к внутреннему', () => {
+  it('выползание нарастает монотонно от внешнего листа к внутреннему', () => {
     const r = plan(bookletJob(), doc(16))
     if (!isOk(r)) throw new Error('план не построен')
     const leftX = r.value.sheets.map((s) => s.placements[0]?.trim.x ?? 0)
-    expect(leftX[0]).toBeCloseTo(leftX[1] ?? 0, 6)
-    expect(leftX[2] ?? 0).toBeGreaterThan(leftX[0] ?? 0)
-    expect(leftX[6] ?? 0).toBeGreaterThan(leftX[4] ?? 0)
+    expect(leftX).toHaveLength(8)
+    for (let i = 0; i < leftX.length; i += 2) {
+      // Обе стороны одного листа сдвинуты одинаково.
+      expect(leftX[i]).toBeCloseTo(leftX[i + 1] ?? 0, 9)
+      // Каждый следующий лист внутрь сдвинут сильнее предыдущего.
+      if (i > 0) expect(leftX[i] ?? 0).toBeGreaterThan(leftX[i - 2] ?? 0)
+    }
   })
 
   it('добивка пустыми попадает в предупреждения', () => {
@@ -71,6 +75,142 @@ describe('планировщик', () => {
       scheme: { kind: 'nup', rows: 0, cols: 2, fill: 'rows' },
     }
     const r = plan(job, doc(4))
+    expect(isErr(r)).toBe(true)
+    if (isErr(r)) expect(r.error.kind).toBe('BadParameters')
+  })
+
+  it('выравнивание приводит разные полосы к общему обрезному формату', () => {
+    const mixed: DocumentInfo = {
+      pageCount: 2,
+      pages: [
+        { trim: rect(0, 0, 400, 500), media: rect(0, 0, 400, 500), hasTrimBox: true },
+        { trim: rect(0, 0, 300, 400), media: rect(0, 0, 300, 400), hasTrimBox: true },
+      ],
+      uniformSize: null,
+    }
+    const job = bookletJob({
+      scheme: { kind: 'booklet', folio: 'all', binding: 'left', creepPerSheet: pt(0) },
+      source: { bleed: pt(0), scaling: 'actual', normalizeSizes: true },
+    })
+    const r = plan(job, mixed)
+    if (!isOk(r)) throw new Error('план не построен')
+    for (const sheet of r.value.sheets) {
+      for (const placement of sheet.placements) {
+        expect(placement.trim.w).toBeCloseTo(400, 6)
+        expect(placement.trim.h).toBeCloseTo(500, 6)
+      }
+    }
+    expect(r.value.warnings).not.toContainEqual({ kind: 'MixedPageSizes' })
+  })
+
+  it('отказ по размеру называет самую большую полосу, а не первую', () => {
+    const mixed: DocumentInfo = {
+      pageCount: 2,
+      pages: [
+        { trim: rect(0, 0, 100, 100), media: rect(0, 0, 100, 100), hasTrimBox: true },
+        { trim: rect(0, 0, 900, 100), media: rect(0, 0, 900, 100), hasTrimBox: true },
+      ],
+      uniformSize: null,
+    }
+    const r = plan(bookletJob(), mixed)
+    expect(isErr(r)).toBe(true)
+    if (isErr(r) && r.error.kind === 'DoesNotFit') {
+      expect(r.error.needed.w).toBeCloseTo(900, 6)
+    }
+  })
+
+  it('переплёт справа зеркалит развороты', () => {
+    const straight = bookletJob({
+      scheme: { kind: 'booklet', folio: 'all', binding: 'left', creepPerSheet: pt(0) },
+    })
+    const mirrored = bookletJob({
+      scheme: { kind: 'booklet', folio: 'all', binding: 'right', creepPerSheet: pt(0) },
+    })
+    const left = plan(straight, doc(8))
+    const right = plan(mirrored, doc(8))
+    if (!isOk(left) || !isOk(right)) throw new Error('план не построен')
+    const leftSources = left.value.sheets[0]?.placements.map((p) => p.source) ?? []
+    const rightSources = right.value.sheets[0]?.placements.map((p) => p.source) ?? []
+    expect(rightSources).toEqual([...leftSources].reverse())
+  })
+
+  it('переплёт сверху ставит полосы одна над другой', () => {
+    const job = bookletJob({
+      scheme: { kind: 'booklet', folio: 'all', binding: 'top', creepPerSheet: pt(0) },
+      sheet: { size: size(595.28, 841.89), margin: pt(0), gap: pt(0) },
+      source: { bleed: pt(0), scaling: 'fit', normalizeSizes: false },
+    })
+    const r = plan(job, doc(4))
+    if (!isOk(r)) throw new Error('план не построен')
+    const placements = r.value.sheets[0]?.placements ?? []
+    expect(placements).toHaveLength(2)
+    expect(placements[0]?.trim.y ?? 0).toBeGreaterThan(placements[1]?.trim.y ?? 0)
+    expect(placements[0]?.trim.x).toBeCloseTo(placements[1]?.trim.x ?? 0, 6)
+  })
+
+  it('тетради по восемь сбрасывают выползание на границе тетради', () => {
+    const job = bookletJob({
+      scheme: { kind: 'booklet', folio: 8, binding: 'left', creepPerSheet: mm(0.5) },
+    })
+    const r = plan(job, doc(16))
+    if (!isOk(r)) throw new Error('план не построен')
+    const leftX = r.value.sheets.map((s) => s.placements[0]?.trim.x ?? 0)
+    expect(leftX[0]).toBeCloseTo(leftX[4] ?? 0, 9)
+    expect(leftX[6] ?? 0).toBeGreaterThan(leftX[4] ?? 0)
+  })
+
+  it('метки разворачиваются на каждый лист', () => {
+    const job = bookletJob({
+      sheet: { size: size(841.89, 595.28), margin: mm(10), gap: pt(0) },
+      source: { bleed: pt(0), scaling: 'fit', normalizeSizes: false },
+      marks: [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2) }],
+    })
+    const r = plan(job, doc(8))
+    if (!isOk(r)) throw new Error('план не построен')
+    for (const sheet of r.value.sheets) {
+      expect(sheet.marks.filter((m) => m.kind === 'line')).toHaveLength(16)
+    }
+  })
+
+  it('step and repeat и cut and stack проходят через планировщик без добивки', () => {
+    const fit = { bleed: pt(0), scaling: 'fit', normalizeSizes: false } as const
+    const repeat = plan(
+      bookletJob({ scheme: { kind: 'stepRepeat', rows: 2, cols: 2, copies: 6 }, source: fit }),
+      doc(1),
+    )
+    if (!isOk(repeat)) throw new Error('план не построен')
+    expect(repeat.value.sheets).toHaveLength(2)
+    expect(repeat.value.padding).toBe(0)
+
+    const stack = plan(
+      bookletJob({ scheme: { kind: 'cutStack', rows: 2, cols: 2 }, source: fit }),
+      doc(16),
+    )
+    if (!isOk(stack)) throw new Error('план не построен')
+    expect(stack.value.sheets).toHaveLength(4)
+    expect(stack.value.padding).toBe(0)
+  })
+
+  it('противоречивые параметры отвергаются', () => {
+    const cases: readonly Job[] = [
+      bookletJob({ scheme: { kind: 'nup', rows: 2.5, cols: 2, fill: 'rows' } }),
+      bookletJob({ scheme: { kind: 'stepRepeat', rows: 2, cols: 2, copies: 0 } }),
+      bookletJob({ sheet: { size: size(841.89, 595.28), margin: pt(500), gap: pt(0) } }),
+      bookletJob({ source: { bleed: pt(-1), scaling: 'fit', normalizeSizes: false } }),
+    ]
+    for (const job of cases) {
+      const r = plan(job, doc(4))
+      expect(isErr(r)).toBe(true)
+      if (isErr(r)) expect(r.error.kind).toBe('BadParameters')
+    }
+  })
+
+  it('пустой документ и противоречивое описание отвергаются', () => {
+    const empty = plan(bookletJob(), doc(0))
+    expect(isErr(empty)).toBe(true)
+
+    const inconsistent: DocumentInfo = { ...doc(4), pageCount: 5 }
+    const r = plan(bookletJob(), inconsistent)
     expect(isErr(r)).toBe(true)
     if (isErr(r)) expect(r.error.kind).toBe('BadParameters')
   })

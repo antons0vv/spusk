@@ -88,6 +88,30 @@ describe('метки', () => {
     expect(marks.filter((m) => m.kind === 'registration')).toHaveLength(0)
   })
 
+  it('метки приводки не ставятся, если радиус не помещается в поле', () => {
+    const { sheet, grid, margin } = sheetWith(mm(12))
+    const marks = resolveMarks(
+      sheet,
+      A4L,
+      grid,
+      [{ kind: 'registration', radius: mm(10), pen: pt(0.2) }],
+      margin,
+    )
+    expect(marks.filter((m) => m.kind === 'registration')).toHaveLength(0)
+  })
+
+  it('поле ровно на пороге даёт метки приводки', () => {
+    const { sheet, grid, margin } = sheetWith(mm(8))
+    const marks = resolveMarks(
+      sheet,
+      A4L,
+      grid,
+      [{ kind: 'registration', radius: mm(3), pen: pt(0.2) }],
+      margin,
+    )
+    expect(marks.filter((m) => m.kind === 'registration')).toHaveLength(4)
+  })
+
   it('метки приводки ставятся по четырём сторонам при достаточном поле', () => {
     const { sheet, grid, margin } = sheetWith(mm(12))
     const marks = resolveMarks(

@@ -63,7 +63,8 @@ const foldMarksFor = (grid: Grid, sheetSize: Size, margin: Pt, length: Pt, pen: 
 }
 
 const registrationMarksFor = (sheetSize: Size, margin: Pt, radius: Pt, pen: Pt) => {
-  if (margin < MIN_MARGIN_FOR_REGISTRATION) return []
+  // Метка сидит по центру поля, поэтому радиус больше половины поля вывел бы её на полосу.
+  if (margin < MIN_MARGIN_FOR_REGISTRATION || radius > margin / 2) return []
   const inset = margin / 2
   return [
     { kind: 'registration', center: point(sheetSize.w / 2, inset), radius, pen },

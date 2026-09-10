@@ -239,10 +239,11 @@ describe('планировщик', () => {
     for (const [job, what] of cases) {
       const r = plan(job, doc(4))
       expect(isErr(r)).toBe(true)
-      if (isErr(r) && r.error.kind === 'BadParameters') {
-        expect(r.error.what).toBe(what)
-        expect(r.error.message.length).toBeGreaterThan(0)
-      }
+      if (!isErr(r)) continue
+      expect(r.error.kind).toBe('BadParameters')
+      if (r.error.kind !== 'BadParameters') continue
+      expect(r.error.what).toBe(what)
+      expect(r.error.message.length).toBeGreaterThan(0)
     }
   })
 
@@ -266,7 +267,10 @@ describe('планировщик', () => {
       }
       const r = plan(bookletJob(), damaged)
       expect(isErr(r)).toBe(true)
-      if (isErr(r) && r.error.kind === 'BadParameters') expect(r.error.what).toBe('pages')
+      if (!isErr(r)) continue
+      expect(r.error.kind).toBe('BadParameters')
+      if (r.error.kind !== 'BadParameters') continue
+      expect(r.error.what).toBe('pages')
     }
   })
 

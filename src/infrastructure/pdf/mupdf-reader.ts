@@ -11,7 +11,11 @@ import { err, ok, type Result } from '../../domain/result.js'
 
 const rectFrom = (box: mupdf.Rect) => rect(box[0], box[1], box[2] - box[0], box[3] - box[1])
 
-const SAME = 1e-6
+const describe = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause)
+
+/** Сотая доля пункта: разные генераторы PDF округляют размеры по-своему. */
+const SAME = 0.01
 
 const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
   const pages: SourcePage[] = []
@@ -49,20 +53,35 @@ export class MupdfReader implements DocumentReaderPort {
     } catch {
       return err({ kind: 'NotAPdf' })
     }
+    // Статический метод открытия объявлен возвращающим общий документ,
+    // поэтому сужаем штатным способом, а не приведением типа.
     const doc = opened.asPDF()
-    if (doc === null) return err({ kind: 'NotAPdf' })
+    if (doc === null) {
+      opened.destroy()
+      return err({ kind: 'NotAPdf' })
+    }
     if (doc.needsPassword()) {
       doc.destroy()
       return err({ kind: 'Encrypted' })
     }
-    return ok(this.register(doc))
+    try {
+      return ok(this.register(doc))
+    } catch (cause) {
+      // Документ распарсился, но дерево полос оказалось повреждено.
+      doc.destroy()
+      return err({ kind: 'Unreadable', message: describe(cause) })
+    }
   }
 
   authenticate(handle: DocumentHandle, password: string): Result<OpenedDocument, OpenError> {
     const doc = this.open_.get(handle.id)
     if (doc === undefined) return err({ kind: 'Unreadable', message: 'документ уже закрыт' })
     if (doc.authenticatePassword(password) === 0) return err({ kind: 'Encrypted' })
-    return ok({ handle, info: infoFrom(doc) })
+    try {
+      return ok({ handle, info: infoFrom(doc) })
+    } catch (cause) {
+      return err({ kind: 'Unreadable', message: describe(cause) })
+    }
   }
 
   close(handle: DocumentHandle): void {
@@ -78,9 +97,12 @@ export class MupdfReader implements DocumentReaderPort {
   }
 
   private register(doc: mupdf.PDFDocument): OpenedDocument {
+    // Описание считается до записи в хранилище: если обход полос упадёт,
+    // в хранилище не останется документа, который некому закрыть.
+    const info = infoFrom(doc)
     const id = this.nextId
     this.nextId += 1
     this.open_.set(id, doc)
-    return { handle: { id }, info: infoFrom(doc) }
+    return { handle: { id }, info }
   }
 }

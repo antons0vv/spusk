@@ -76,6 +76,20 @@ describe('планировщик', () => {
     expect(isOk(plan(bookletJob(), barely))).toBe(true)
   })
 
+  it('превышение в две сотых пункта уже считается непомещением', () => {
+    const tooBig: DocumentInfo = {
+      pageCount: 2,
+      pages: Array.from({ length: 2 }, () => ({
+        // Ячейка ровно 420.945, превышение вдвое больше допуска.
+        trim: rect(0, 0, 420.965, 595.28),
+        media: rect(0, 0, 420.965, 595.28),
+        hasTrimBox: true,
+      })),
+      uniformSize: size(420.965, 595.28),
+    }
+    expect(isErr(plan(bookletJob(), tooBig))).toBe(true)
+  })
+
   it('полоса, не влезающая в натуральную величину, это отказ', () => {
     const job = bookletJob({ sheet: { size: size(400, 400), margin: pt(0), gap: pt(0) } })
     const r = plan(job, doc(4))

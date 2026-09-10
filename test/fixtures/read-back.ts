@@ -18,6 +18,13 @@ const isStextPage = (value: unknown): value is StextPage =>
   typeof value === 'object' && value !== null && 'blocks' in value
 
 /**
+ * Структурный текст без масштаба округляет координаты до целых пунктов, а проверки
+ * выползания измеряют сдвиги в доли пункта. Просим координаты в сотых долях
+ * и делим обратно, чтобы наружу выходили обычные пункты.
+ */
+const STEXT_SCALE = 100
+
+/**
  * Читает готовый PDF и отдаёт по каждому листу его размер и текстовые метки с координатами.
  * Координаты структурного текста считаются от верхнего левого угла.
  */
@@ -27,7 +34,9 @@ export const readBack = (bytes: Uint8Array): readonly ReadSheet[] => {
   for (let i = 0; i < doc.countPages(); i += 1) {
     const page = doc.loadPage(i)
     const bounds = page.getBounds()
-    const parsed: unknown = JSON.parse(page.toStructuredText('preserve-whitespace').asJSON())
+    const parsed: unknown = JSON.parse(
+      page.toStructuredText('preserve-whitespace').asJSON(STEXT_SCALE),
+    )
     const labels: Label[] = []
     if (isStextPage(parsed)) {
       for (const block of parsed.blocks ?? []) {
@@ -35,8 +44,8 @@ export const readBack = (bytes: Uint8Array): readonly ReadSheet[] => {
           if (line.text === undefined || line.bbox === undefined) continue
           labels.push({
             text: line.text,
-            x: line.bbox.x + line.bbox.w / 2,
-            y: line.bbox.y + line.bbox.h / 2,
+            x: (line.bbox.x + line.bbox.w / 2) / STEXT_SCALE,
+            y: (line.bbox.y + line.bbox.h / 2) / STEXT_SCALE,
           })
         }
       }

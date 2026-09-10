@@ -141,7 +141,9 @@ export class MupdfWriter implements ImposedWriterPort {
         sheetPage.setPageBox('TrimBox', mediabox)
       }
 
-      return ok(copyOf(target.saveToBuffer('compress')))
+      // garbage=4 объединяет и выкидывает недостижимые и повторяющиеся объекты:
+      // без него общий словарь ресурсов и формы всё равно плодятся по объекту на лист.
+      return ok(copyOf(target.saveToBuffer('compress,garbage=4')))
     } catch (cause) {
       return err({ kind: 'Failed', message: describe(cause) })
     } finally {

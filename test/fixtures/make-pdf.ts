@@ -12,12 +12,14 @@ type Options = {
 
 const encoder = new TextEncoder()
 
-const contentFor = (label: string, w: number, h: number, off: number): string =>
+const contentFor = (label: string, w: number, h: number, off: number, bleed: number): string =>
   [
     `q 0.85 0.85 0.85 rg ${off} ${off} ${w} ${h} re f Q`,
     `BT /F1 48 Tf 1 0 0 1 ${off + w / 2 - 40} ${off + h / 2 - 20} Tm 0 0 0 rg (${label}) Tj ET`,
     `BT /F1 14 Tf 1 0 0 1 ${off + 12} ${off + 12} Tm (bottom-${label}) Tj ET`,
     `BT /F1 14 Tf 1 0 0 1 ${off + 12} ${off + h - 24} Tm (top-${label}) Tj ET`,
+    // Метка в области вылета: лежит за линией реза (TrimBox) и не должна попасть на готовый лист.
+    bleed > 0 ? `BT /F1 8 Tf 1 0 0 1 ${off + 12} ${off - bleed / 2} Tm (bleed-${label}) Tj ET` : '',
   ].join('\n')
 
 /** Собирает PDF вручную, без зависимостей: полосы пронумерованы P1, P2, ... */
@@ -54,7 +56,7 @@ export const makeNumberedPdf = (options: Options): Uint8Array => {
 
   for (let i = 0; i < options.pageCount; i += 1) {
     const label = `P${i + 1}`
-    const stream = contentFor(label, options.width, options.height, origin + bleed)
+    const stream = contentFor(label, options.width, options.height, origin + bleed, bleed)
     const contentNum = contentNums[i]
     const pageNum = pageNums[i]
     if (contentNum === undefined || pageNum === undefined) continue

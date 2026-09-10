@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { assemble } from './assemble.js'
-import { rect, size } from './geometry.js'
+import { apply, rect, size } from './geometry.js'
 import { buildGrid } from './grid.js'
 import { BLANK, page, type Side } from './slots.js'
 import { mm, pt } from './units.js'
@@ -95,5 +95,32 @@ describe('сборка размещений', () => {
     )
     expect(sheets[0]?.placements[0]?.source).toEqual({ kind: 'blank' })
     expect(sheets[0]?.placements[0]?.trim.w).toBeCloseTo(419.53, 6)
+  })
+
+  it('обрезной формат, начинающийся не в нуле, приводится к углу ячейки', () => {
+    const bleed = mm(3)
+    const withBleed = {
+      trim: rect(bleed, bleed, 419.53, 595.28),
+      media: rect(0, 0, 419.53 + 2 * bleed, 595.28 + 2 * bleed),
+    }
+    const grid = buildGrid(EXACT, 1, 2, pt(0), pt(0))
+    const sheets = assemble(
+      oneSide([page(0), page(1)]),
+      grid,
+      [withBleed, withBleed],
+      withBleed,
+      { bleed: pt(0), scaling: 'actual' },
+      pt(0),
+      pt(0),
+    )
+    const first = sheets[0]?.placements[0]
+    if (first === undefined) throw new Error('нет размещения')
+    // Матрица обязана сдвинуть содержимое на минус начало обрезного формата.
+    expect(first.matrix[4]).toBeCloseTo(-bleed, 6)
+    expect(first.matrix[5]).toBeCloseTo(-bleed, 6)
+    // После применения матрицы левый нижний угол обрезного формата ложится в угол линии реза.
+    const corner = apply(first.matrix, { x: pt(bleed), y: pt(bleed) })
+    expect(corner.x).toBeCloseTo(first.trim.x, 6)
+    expect(corner.y).toBeCloseTo(first.trim.y, 6)
   })
 })

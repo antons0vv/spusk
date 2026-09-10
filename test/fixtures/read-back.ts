@@ -46,14 +46,18 @@ export const readBack = (bytes: Uint8Array): readonly ReadSheet[] => {
   return sheets
 }
 
-/** Определяет, в какой ячейке сетки лежит метка. Строка ноль — верх листа. */
+/**
+ * Определяет, в какой ячейке сетки лежит метка. Строка ноль — верх листа.
+ * Сравнение строгое, а не по вхождению: имена меток — префиксы друг друга,
+ * «bottom-P1» входит в «bottom-P16», а в брошюре эти полосы лежат на одном листе.
+ */
 export const cellOf = (
   sheet: ReadSheet,
   rows: number,
   cols: number,
   label: string,
 ): { readonly row: number; readonly col: number } | null => {
-  const found = sheet.labels.find((l) => l.text.includes(label))
+  const found = sheet.labels.find((l) => l.text === label)
   if (found === undefined) return null
   const col = Math.min(Math.floor(found.x / (sheet.width / cols)), cols - 1)
   const row = Math.min(Math.floor(found.y / (sheet.height / rows)), rows - 1)

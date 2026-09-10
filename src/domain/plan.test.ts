@@ -62,6 +62,20 @@ describe('планировщик', () => {
     expect(r.value.warnings).toContainEqual({ kind: 'MixedPageSizes' })
   })
 
+  it('превышение меньше сотой доли пункта непомещением не считается', () => {
+    const barely: DocumentInfo = {
+      pageCount: 2,
+      pages: Array.from({ length: 2 }, () => ({
+        // Ячейка на листе A4 альбомном ровно 420.945 шириной.
+        trim: rect(0, 0, 420.9455, 595.28),
+        media: rect(0, 0, 420.9455, 595.28),
+        hasTrimBox: true,
+      })),
+      uniformSize: size(420.9455, 595.28),
+    }
+    expect(isOk(plan(bookletJob(), barely))).toBe(true)
+  })
+
   it('полоса, не влезающая в натуральную величину, это отказ', () => {
     const job = bookletJob({ sheet: { size: size(400, 400), margin: pt(0), gap: pt(0) } })
     const r = plan(job, doc(4))

@@ -1,3 +1,4 @@
+import type { Size } from '../domain/geometry.js'
 import type { DocumentInfo } from '../domain/job.js'
 import type { Plan } from '../domain/plan.js'
 import type { Result } from '../domain/result.js'
@@ -22,6 +23,23 @@ export type WriteError =
   | { readonly kind: 'Aborted' }
   | { readonly kind: 'Failed'; readonly message: string }
 
+export type RenderError = { readonly kind: 'Failed'; readonly message: string }
+
+/** Сколько листов уже собрано из скольких. */
+export type Progress = (done: number, total: number) => void
+
+/**
+ * Растр приведённой полосы, построчно сверху вниз, по четыре байта на пиксель.
+ * `page` — размер той же полосы в пунктах: по нему пиксели кладутся в координаты
+ * домена, пиксельные размеры для этого не годятся, они округлены.
+ */
+export type PageImage = {
+  readonly width: number
+  readonly height: number
+  readonly pixels: Uint8ClampedArray<ArrayBuffer>
+  readonly page: Size
+}
+
 export interface DocumentReaderPort {
   /**
    * Открывает документ. Защищённый паролем документ тоже остаётся открытым:
@@ -34,5 +52,41 @@ export interface DocumentReaderPort {
 }
 
 export interface ImposedWriterPort {
-  write(handle: DocumentHandle, plan: Plan): Result<Uint8Array, WriteError>
+  write(handle: DocumentHandle, plan: Plan, onProgress?: Progress): Result<Uint8Array, WriteError>
+}
+
+export interface PageRendererPort {
+  /** Рисует полосу так, чтобы длинная сторона растра была не больше `maxPx`. */
+  render(handle: DocumentHandle, pageIndex: number, maxPx: number): Result<PageImage, RenderError>
+}
+
+/**
+ * Поток с движком пропал: его пересоздали по отмене (`Aborted`) или он упал сам,
+ * чаще всего от нехватки памяти (`Crashed`). Открытые документы пропадают вместе
+ * с ним, дескрипторы от прежнего потока новый поток не примет.
+ */
+export type EngineFailure =
+  | { readonly kind: 'Aborted' }
+  | { readonly kind: 'Crashed'; readonly message: string }
+
+/** Те же три порта за границей потока: через неё синхронных вызовов не бывает. */
+export interface EnginePort {
+  open(bytes: Uint8Array): Promise<Result<OpenedDocument, OpenError | EngineFailure>>
+  authenticate(
+    handle: DocumentHandle,
+    password: string,
+  ): Promise<Result<OpenedDocument, OpenError | EngineFailure>>
+  close(handle: DocumentHandle): Promise<void>
+  render(
+    handle: DocumentHandle,
+    pageIndex: number,
+    maxPx: number,
+  ): Promise<Result<PageImage, RenderError | EngineFailure>>
+  write(
+    handle: DocumentHandle,
+    plan: Plan,
+    onProgress: Progress,
+  ): Promise<Result<Uint8Array, WriteError | EngineFailure>>
+  /** Обрывает всё, что идёт в потоке. Незавершённые вызовы получают `Aborted`. */
+  reset(): void
 }

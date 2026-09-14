@@ -51,13 +51,12 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
   }
 }
 
-let readersCreated = 0
-
-/** Каждому читателю своё происхождение: по нему дескриптор узнаёт своего хозяина. */
-const nextOrigin = (): string => {
-  readersCreated += 1
-  return `mupdf-reader-${readersCreated}`
-}
+/**
+ * Каждому читателю своё происхождение: по нему дескриптор узнаёт своего хозяина.
+ * Случайное, а не счётчик: пересозданный поток начинает счёт заново и принял бы
+ * дескриптор от прежнего потока, молча отдав вместо документа другой.
+ */
+const nextOrigin = (): string => `mupdf-reader-${crypto.randomUUID()}`
 
 /** Читает PDF через mupdf. Документ остаётся открытым до вызова close. */
 export class MupdfReader implements DocumentReaderPort {

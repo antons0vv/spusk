@@ -1,0 +1,173 @@
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { DocumentHandle } from '../../application/ports.js'
+import type { Sheet } from '../../domain/assemble.js'
+import { compose, type Matrix, type Rect, type Size } from '../../domain/geometry.js'
+import { pt } from '../../domain/units.js'
+import { bucketFor, type Thumbnails, type Want } from './thumbnails.js'
+import {
+  type Box,
+  fitView,
+  pointToCanvas,
+  rasterToCanvas,
+  rectToCanvas,
+  snapToPixels,
+  type View,
+} from './transform.js'
+
+const HAIR = '#dcdcdc'
+const WASH = '#f3f3f3'
+
+/** Под навигацию под листом: отбивка и строка. Интерлиньяж из styles.css, 20 × 1.4. */
+const FOOTER = 2 * 28
+
+const useBox = (ref: React.RefObject<HTMLElement | null>): Box => {
+  const [box, setBox] = useState<Box>({ w: 0, h: 0 })
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (element === null) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry === undefined) return
+      setBox({ w: entry.contentRect.width, h: entry.contentRect.height })
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return box
+}
+
+/**
+ * Клип к целым пикселям экрана. Соседние полосы делят одну линию реза, и без
+ * округления сглаживание обоих клипов оставляет между ними светлый шов.
+ */
+const snappedClip = (r: Rect, size: Size, view: View, dpr: number) => {
+  const c = rectToCanvas(r, size, view)
+  const snap = (v: number) => Math.round(v * dpr) / dpr
+  const x = snap(c.x)
+  const y = snap(c.y)
+  return { x, y, w: snap(c.x + c.w) - x, h: snap(c.y + c.h) - y }
+}
+
+const drawMarks = (
+  ctx: CanvasRenderingContext2D,
+  sheet: Sheet,
+  size: Size,
+  view: View,
+  dpr: number,
+) => {
+  ctx.strokeStyle = '#000'
+  // Перо метки в масштабе превью тоньше пикселя: рисуем волосяной линией экрана.
+  ctx.lineWidth = 1 / dpr
+  for (const mark of sheet.marks) {
+    ctx.beginPath()
+    if (mark.kind === 'line') {
+      ctx.setLineDash(mark.dash === null ? [] : mark.dash.map((d) => d * view.scale))
+      const from = pointToCanvas(mark.from, size, view)
+      const to = pointToCanvas(mark.to, size, view)
+      ctx.moveTo(from.x, from.y)
+      ctx.lineTo(to.x, to.y)
+    } else {
+      ctx.setLineDash([])
+      const c = pointToCanvas(mark.center, size, view)
+      const r = mark.radius * view.scale
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2)
+      ctx.moveTo(c.x - r * 1.4, c.y)
+      ctx.lineTo(c.x + r * 1.4, c.y)
+      ctx.moveTo(c.x, c.y - r * 1.4)
+      ctx.lineTo(c.x, c.y + r * 1.4)
+    }
+    ctx.stroke()
+  }
+  ctx.setLineDash([])
+}
+
+/**
+ * Один лист плана целиком. Полосы рисуются из миниатюр через ту же матрицу
+ * размещения и тот же клип по вылету, что у писателя; движок при перерисовке не
+ * трогается, пока нужная миниатюра уже есть. Лист прижат к верху колонки,
+ * навигация идёт сразу под ним.
+ */
+export const Preview = ({
+  sheet,
+  size,
+  thumbnails,
+  handle,
+  children,
+}: {
+  sheet: Sheet
+  size: Size
+  thumbnails: Thumbnails
+  handle: DocumentHandle
+  children: ReactNode
+}) => {
+  const holder = useRef<HTMLDivElement>(null)
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const box = useBox(holder)
+  const [loaded, setLoaded] = useState(0)
+
+  const fitted = fitView(size, { w: box.w, h: Math.max(0, box.h - FOOTER) })
+  const cssW = Math.floor(size.w * fitted.scale)
+  const cssH = Math.floor(size.h * fitted.scale)
+
+  useEffect(() => thumbnails.subscribe(() => setLoaded((n) => n + 1)), [thumbnails])
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loaded и handle перерисовывают лист, когда пришла миниатюра или переоткрылся документ
+  useLayoutEffect(() => {
+    const element = canvas.current
+    const ctx = element?.getContext('2d')
+    if (element == null || ctx == null || cssW <= 0 || cssH <= 0) return
+    const dpr = window.devicePixelRatio || 1
+    element.width = Math.round(cssW * dpr)
+    element.height = Math.round(cssH * dpr)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, cssW, cssH)
+    ctx.imageSmoothingQuality = 'high'
+
+    const view: View = { scale: Math.min(cssW / size.w, cssH / size.h), x: 0, y: 0 }
+    const wanted: Want[] = []
+    for (const placement of sheet.placements) {
+      const trim = rectToCanvas(placement.trim, size, view)
+      if (placement.source.kind === 'blank') {
+        ctx.strokeStyle = HAIR
+        ctx.lineWidth = 1 / dpr
+        ctx.strokeRect(trim.x, trim.y, trim.w, trim.h)
+        continue
+      }
+      const page = placement.source.index
+      wanted.push({ page, px: bucketFor(Math.max(trim.w, trim.h) * dpr) })
+      const thumb = thumbnails.best(page)
+      const clip = snappedClip(placement.clip, size, view, dpr)
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(clip.x, clip.y, clip.w, clip.h)
+      ctx.clip()
+      if (thumb === null) {
+        ctx.fillStyle = WASH
+        ctx.fillRect(trim.x, trim.y, trim.w, trim.h)
+      } else {
+        const toDevice: Matrix = [dpr, 0, 0, dpr, pt(0), pt(0)]
+        const m = snapToPixels(
+          compose(rasterToCanvas(thumb, placement.matrix, size, view), toDevice),
+          thumb.width,
+          thumb.height,
+        )
+        ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5])
+        ctx.drawImage(thumb.bitmap, 0, 0)
+      }
+      ctx.restore()
+    }
+    drawMarks(ctx, sheet, size, view, dpr)
+    thumbnails.want(wanted)
+  }, [sheet, size, cssW, cssH, thumbnails, loaded, handle])
+
+  return (
+    <div ref={holder} className="flex min-h-0 min-w-0 flex-col items-center">
+      <canvas
+        ref={canvas}
+        style={{ width: cssW, height: cssH }}
+        className="shrink-0 shadow-[0_0_0_var(--pen)_var(--color-hair)]"
+      />
+      <div className="mt-[1lh]">{children}</div>
+    </div>
+  )
+}

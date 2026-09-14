@@ -35,7 +35,7 @@ export type Plan = {
   readonly padding: number
 }
 
-const gridShapeFor = (scheme: Scheme): { rows: number; cols: number } => {
+export const gridShapeFor = (scheme: Scheme): { rows: number; cols: number } => {
   if (scheme.kind === 'booklet') {
     return scheme.binding === 'top' ? { rows: 2, cols: 1 } : { rows: 1, cols: 2 }
   }
@@ -195,6 +195,7 @@ export const plan = (job: Job, doc: DocumentInfo): Result<Plan, PlanError> => {
     { bleed: job.source.bleed, scaling: job.source.scaling },
     job.sheet.margin,
     job.sheet.gap,
+    job.scheme.kind === 'booklet',
   )
 
   const scheme = job.scheme
@@ -212,7 +213,14 @@ export const plan = (job: Job, doc: DocumentInfo): Result<Plan, PlanError> => {
 
   const sheets = withCreep.map((sheet) => ({
     ...sheet,
-    marks: resolveMarks(sheet, job.sheet.size, grid, job.marks, job.sheet.margin),
+    marks: resolveMarks(
+      sheet,
+      job.sheet.size,
+      grid,
+      job.marks,
+      job.sheet.margin,
+      job.scheme.kind === 'booklet',
+    ),
   }))
 
   return ok({

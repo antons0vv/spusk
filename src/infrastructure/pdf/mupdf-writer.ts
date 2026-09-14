@@ -1,5 +1,10 @@
 import * as mupdf from 'mupdf'
-import type { DocumentHandle, ImposedWriterPort, WriteError } from '../../application/ports.js'
+import type {
+  DocumentHandle,
+  ImposedWriterPort,
+  Progress,
+  WriteError,
+} from '../../application/ports.js'
 import type { Placement } from '../../domain/assemble.js'
 import type { Plan } from '../../domain/plan.js'
 import { err, ok, type Result } from '../../domain/result.js'
@@ -118,7 +123,7 @@ const describe = (cause: unknown): string =>
 export class MupdfWriter implements ImposedWriterPort {
   constructor(private readonly reader: MupdfReader) {}
 
-  write(handle: DocumentHandle, plan: Plan): Result<Uint8Array, WriteError> {
+  write(handle: DocumentHandle, plan: Plan, onProgress?: Progress): Result<Uint8Array, WriteError> {
     const source = this.reader.document(handle)
     if (source === undefined) {
       return err({ kind: 'Failed', message: 'документ закрыт или открыт другим читателем' })
@@ -171,6 +176,7 @@ export class MupdfWriter implements ImposedWriterPort {
         resources.put('XObject', xobjects)
         const content = [ops.join('\n'), markOps(sheet.marks)].filter((s) => s !== '').join('\n')
         target.insertPage(-1, target.addPage(mediabox, 0, resources, content))
+        onProgress?.(target.countPages(), plan.sheets.length)
       }
 
       // Коробки листа: обрезной и полезный формат совпадают с форматом листа,

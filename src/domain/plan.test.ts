@@ -195,8 +195,9 @@ describe('планировщик', () => {
     })
     const r = plan(job, doc(8))
     if (!isOk(r)) throw new Error('план не построен')
+    // Две внешние вертикали и две горизонтали разворота, по штриху с концов; корешок не режут.
     for (const sheet of r.value.sheets) {
-      expect(sheet.marks.filter((m) => m.kind === 'line')).toHaveLength(16)
+      expect(sheet.marks.filter((m) => m.kind === 'line')).toHaveLength(8)
     }
   })
 

@@ -30,19 +30,60 @@ describe('сборка размещений', () => {
     expect(sheets[0]?.placements[1]?.matrix[4]).toBeCloseTo(419.53, 6)
   })
 
-  it('полоса центрируется, когда ячейка шире её', () => {
+  it('полосы собираются в общий блок по центру листа, а не центрируются каждая в своей ячейке', () => {
     const grid = buildGrid(A4L, 1, 2, pt(0), pt(0))
     const sheets = assemble(
-      oneSide([page(0)]),
+      oneSide([page(0), page(1)]),
       grid,
-      [A5],
+      [A5, A5],
       A5,
       { bleed: pt(0), scaling: 'actual' },
       pt(0),
       pt(0),
     )
-    // Ячейка A4L/2 = 420.945 шире полосы 419.53, половина разницы уходит в отступ слева.
-    expect(sheets[0]?.placements[0]?.matrix[4]).toBeCloseTo((420.945 - 419.53) / 2, 6)
+    const [left, right] = sheets[0]?.placements ?? []
+    if (left === undefined || right === undefined) throw new Error('нет размещений')
+    // Лист шире разворота на 2.83 pt: весь запас уходит поровну наружу, стык остаётся вплотную.
+    expect(left.trim.x).toBeCloseTo((841.89 - 2 * 419.53) / 2, 6)
+    expect(right.trim.x).toBeCloseTo(left.trim.x + 419.53, 6)
+  })
+
+  it('разворот брошюры на большом листе смыкается на корешке', () => {
+    const A3L = size(1190.55, 841.89)
+    const grid = buildGrid(A3L, 1, 2, mm(8), pt(0))
+    const sheets = assemble(
+      oneSide([page(0), page(1)]),
+      grid,
+      [A5, A5],
+      A5,
+      { bleed: pt(0), scaling: 'actual' },
+      mm(8),
+      pt(0),
+    )
+    const [left, right] = sheets[0]?.placements ?? []
+    if (left === undefined || right === undefined) throw new Error('нет размещений')
+    expect(left.trim.x + left.trim.w).toBeCloseTo(A3L.w / 2, 6)
+    expect(right.trim.x).toBeCloseTo(A3L.w / 2, 6)
+    expect(left.trim.y).toBeCloseTo((A3L.h - 595.28) / 2, 6)
+  })
+
+  it('зазор между полосами блока ровно тот, что задан', () => {
+    const grid = buildGrid(A4L, 2, 2, mm(10), mm(6))
+    const card = { trim: rect(0, 0, 255, 141), media: rect(0, 0, 255, 141) }
+    const sheets = assemble(
+      oneSide([page(0), page(0), page(0), page(0)]),
+      grid,
+      [card],
+      card,
+      { bleed: pt(0), scaling: 'actual' },
+      mm(10),
+      mm(6),
+    )
+    const [a, b, c] = sheets[0]?.placements ?? []
+    if (a === undefined || b === undefined || c === undefined) throw new Error('нет размещений')
+    expect(b.trim.x - (a.trim.x + a.trim.w)).toBeCloseTo(mm(6), 6)
+    // Строка ноль сверху: вторая строка ниже первой на высоту полосы и зазор.
+    expect(a.trim.y - (c.trim.y + c.trim.h)).toBeCloseTo(mm(6), 6)
   })
 
   it('режим «вписать» масштабирует по меньшей стороне', () => {
@@ -122,5 +163,48 @@ describe('сборка размещений', () => {
     const corner = apply(first.matrix, { x: pt(bleed), y: pt(bleed) })
     expect(corner.x).toBeCloseTo(first.trim.x, 6)
     expect(corner.y).toBeCloseTo(first.trim.y, 6)
+  })
+
+  it('в брошюре полоса меньшего формата прижимается к корешку, а не висит посередине места', () => {
+    const A4P = size(595.28, 841.89)
+    const A6 = { trim: rect(0, 0, 297.64, 419.53), media: rect(0, 0, 297.64, 419.53) }
+    const sheetSize = size(2 * 595.28, 841.89)
+    const grid = buildGrid(sheetSize, 1, 2, pt(0), pt(0))
+    const sheets = assemble(
+      oneSide([page(0), page(1)]),
+      grid,
+      [A6, { trim: rect(0, 0, A4P.w, A4P.h), media: rect(0, 0, A4P.w, A4P.h) }],
+      A6,
+      { bleed: pt(0), scaling: 'actual' },
+      pt(0),
+      pt(0),
+      true,
+    )
+    const [small, big] = sheets[0]?.placements ?? []
+    if (small === undefined || big === undefined) throw new Error('нет размещений')
+    expect(small.trim.x + small.trim.w).toBeCloseTo(sheetSize.w / 2, 6)
+    expect(big.trim.x).toBeCloseTo(sheetSize.w / 2, 6)
+    // Поперёк корешка полоса по центру.
+    expect(small.trim.y).toBeCloseTo((841.89 - 419.53) / 2, 6)
+  })
+
+  it('при переплёте сверху меньшая полоса прижимается к горизонтальному сгибу', () => {
+    const A6L = { trim: rect(0, 0, 419.53, 297.64), media: rect(0, 0, 419.53, 297.64) }
+    const A5L = { trim: rect(0, 0, 595.28, 419.53), media: rect(0, 0, 595.28, 419.53) }
+    const sheetSize = size(595.28, 2 * 419.53)
+    const grid = buildGrid(sheetSize, 2, 1, pt(0), pt(0))
+    const sheets = assemble(
+      oneSide([page(0), page(1)]),
+      grid,
+      [A6L, A5L],
+      A6L,
+      { bleed: pt(0), scaling: 'actual' },
+      pt(0),
+      pt(0),
+      true,
+    )
+    const [top] = sheets[0]?.placements ?? []
+    if (top === undefined) throw new Error('нет размещения')
+    expect(top.trim.y).toBeCloseTo(sheetSize.h / 2, 6)
   })
 })

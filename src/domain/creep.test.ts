@@ -81,4 +81,49 @@ describe('выползание', () => {
       (shifted.placements[0]?.matrix[5] ?? 0) - (sheet.placements[0]?.matrix[5] ?? 0),
     ).toBeCloseTo(-mm(1), 6)
   })
+
+  it('сдвинутые к корешку полосы обрезаются по линии сгиба и не заходят друг на друга', () => {
+    const grid = buildGrid(A4L, 1, 2, pt(0), pt(0))
+    const sheets = assemble(
+      bookletOrder(16, 'all'),
+      grid,
+      Array.from({ length: 16 }, () => A5),
+      A5,
+      { bleed: mm(3), scaling: 'actual' },
+      pt(0),
+      pt(0),
+    )
+    const inner = sheets[6]
+    if (inner === undefined) throw new Error('нет листа')
+    const [left, right] = applyCreep(inner, mm(1), 'left', A4L).placements
+    if (left === undefined || right === undefined) throw new Error('нет размещений')
+    // Содержимое сдвинуто, но за сгиб не выходит: иначе полоса печаталась бы на соседней.
+    expect(left.clip.x + left.clip.w).toBeLessThanOrEqual(A4L.w / 2 + 1e-9)
+    expect(right.clip.x).toBeGreaterThanOrEqual(A4L.w / 2 - 1e-9)
+    // Внешний край не трогается.
+    expect(left.clip.x).toBeCloseTo((inner.placements[0]?.clip.x ?? 0) + mm(1), 6)
+  })
+
+  it('при переплёте сверху полосы обрезаются по горизонтальному сгибу', () => {
+    const tall = size(595.28, 841.89)
+    const grid = buildGrid(tall, 2, 1, pt(0), pt(0))
+    const sheets = assemble(
+      bookletOrder(16, 'all'),
+      grid,
+      Array.from({ length: 16 }, () => ({
+        trim: rect(0, 0, 595.28, 419.53),
+        media: rect(0, 0, 595.28, 419.53),
+      })),
+      { trim: rect(0, 0, 595.28, 419.53), media: rect(0, 0, 595.28, 419.53) },
+      { bleed: mm(3), scaling: 'actual' },
+      pt(0),
+      pt(0),
+    )
+    const inner = sheets[6]
+    if (inner === undefined) throw new Error('нет листа')
+    const [top, bottom] = applyCreep(inner, mm(1), 'top', tall).placements
+    if (top === undefined || bottom === undefined) throw new Error('нет размещений')
+    expect(top.clip.y).toBeGreaterThanOrEqual(tall.h / 2 - 1e-9)
+    expect(bottom.clip.y + bottom.clip.h).toBeLessThanOrEqual(tall.h / 2 + 1e-9)
+  })
 })

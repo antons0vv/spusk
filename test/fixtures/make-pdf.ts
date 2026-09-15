@@ -12,6 +12,8 @@ export type Options = {
   readonly height: number
   /** Вылет со всех сторон. MediaBox станет больше TrimBox на эту величину. */
   readonly bleed?: number
+  /** Объявить BleedBox на эту величину вокруг TrimBox. Работает вместе с `bleed`. */
+  readonly bleedBox?: number
   /** Сдвиг начала координат MediaBox (и содержимого вместе с ним) по x и y. */
   readonly origin?: number
   /** Поворот страницы (/Rotate), градусы по часовой стрелке: 90, 180 или 270. */
@@ -120,6 +122,11 @@ export const makeNumberedPdf = (options: Options): Uint8Array => {
       bleed > 0
         ? ` /TrimBox [${origin + bleed} ${origin + bleed} ${origin + bleed + options.width} ${origin + bleed + options.height}]`
         : ''
+    const bleedBox =
+      options.bleedBox === undefined
+        ? ''
+        : ` /BleedBox [${origin + bleed - options.bleedBox} ${origin + bleed - options.bleedBox} ` +
+          `${origin + bleed + options.width + options.bleedBox} ${origin + bleed + options.height + options.bleedBox}]`
     const crop =
       options.crop === undefined
         ? ''
@@ -141,7 +148,7 @@ export const makeNumberedPdf = (options: Options): Uint8Array => {
     emit(
       spot.num,
       `<< /Type /Page /Parent 2 0 R /MediaBox [${origin} ${origin} ${origin + mediaW} ${origin + mediaH}]` +
-        `${trim}${crop}${rotate}${group}${resources}${stream} >>`,
+        `${trim}${bleedBox}${crop}${rotate}${group}${resources}${stream} >>`,
     )
   }
 

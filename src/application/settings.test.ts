@@ -10,6 +10,7 @@ const docOf = (wMm: number, hMm: number, pageCount = 16): DocumentInfo => ({
     trim: { x: pt(0), y: pt(0), w: mm(wMm), h: mm(hMm) },
     media: { x: pt(0), y: pt(0), w: mm(wMm), h: mm(hMm) },
     hasTrimBox: false,
+    bleed: null,
   })),
   uniformSize: size(mm(wMm), mm(hMm)),
 })
@@ -66,13 +67,23 @@ describe('поле auto', () => {
     expect(neededMarginMm({ ...DEFAULT_SETTINGS, bleedMm: 3 })).toBe(3)
   })
 
-  it('метки реза занимают отступ и длину', () => {
-    expect(neededMarginMm({ ...DEFAULT_SETTINGS, marks: marks({ crop: true }) })).toBe(8)
+  it('метки реза умещаются в пять миллиметров поля', () => {
+    expect(neededMarginMm({ ...DEFAULT_SETTINGS, marks: marks({ crop: true }) })).toBe(5)
+  })
+
+  it('при вылете до трёх миллиметров поле под метки остаётся пять: штрих укорачивается', () => {
+    const s: Settings = { ...DEFAULT_SETTINGS, bleedMm: 3, marks: marks({ crop: true }) }
+    expect(neededMarginMm(s)).toBe(5)
+    const crop = resolve(s, a5).job.marks[0]
+    if (crop?.kind !== 'crop') throw new Error('нет метки реза')
+    expect(toMm(crop.offset)).toBeCloseTo(3, 6)
+    expect(toMm(crop.length)).toBeCloseTo(2, 6)
   })
 
   it('отступ метки реза растёт вместе с вылетом, чтобы метка не легла на вылет', () => {
     const s: Settings = { ...DEFAULT_SETTINGS, bleedMm: 5, marks: marks({ crop: true }) }
-    expect(neededMarginMm(s)).toBe(10)
+    // Короче двух миллиметров штрих не делается: резчик его не увидит.
+    expect(neededMarginMm(s)).toBe(7)
     const crop = resolve(s, a5).job.marks[0]
     if (crop?.kind !== 'crop') throw new Error('нет метки реза')
     expect(toMm(crop.offset)).toBeCloseTo(5, 6)
@@ -94,7 +105,7 @@ describe('поле auto', () => {
 
   it('поле из auto попадает в задание, заданное вручную — как есть', () => {
     const on = marks({ crop: true })
-    expect(resolve({ ...DEFAULT_SETTINGS, marks: on }, a5).marginMm).toBe(8)
+    expect(resolve({ ...DEFAULT_SETTINGS, marks: on }, a5).marginMm).toBe(5)
     expect(resolve({ ...DEFAULT_SETTINGS, marks: on, marginMm: 2 }, a5).marginMm).toBe(2)
   })
 })
@@ -138,5 +149,47 @@ describe('свой формат листа', () => {
     const r = resolve({ ...DEFAULT_SETTINGS, format: 'custom', customWMm: 200, customHMm: 150 }, a5)
     expect(r.scale).toBeLessThan(1)
     expect(r.plan.ok).toBe(true)
+  })
+})
+
+describe('вылет auto', () => {
+  const withBleed = (bleedMm: number): DocumentInfo => {
+    const base = docOf(145, 205, 4)
+    return {
+      ...base,
+      pages: base.pages.map((p) => ({
+        ...p,
+        hasTrimBox: true,
+        bleed: {
+          x: pt(p.trim.x - mm(bleedMm)),
+          y: pt(p.trim.y - mm(bleedMm)),
+          w: pt(p.trim.w + 2 * mm(bleedMm)),
+          h: pt(p.trim.h + 2 * mm(bleedMm)),
+        },
+      })),
+    }
+  }
+
+  it('по умолчанию вылет берётся из BleedBox файла', () => {
+    const r = resolve(DEFAULT_SETTINGS, withBleed(3))
+    expect(r.bleedMm).toBe(3)
+    expect(toMm(r.job.source.bleed)).toBeCloseTo(3, 6)
+  })
+
+  it('без BleedBox в файле вылет auto нулевой', () => {
+    expect(resolve(DEFAULT_SETTINGS, a5).bleedMm).toBe(0)
+  })
+
+  it('заданный вручную вылет файл не перебивает', () => {
+    expect(resolve({ ...DEFAULT_SETTINGS, bleedMm: 1 }, withBleed(3)).bleedMm).toBe(1)
+  })
+
+  it('поле auto и отступ меток считаются от вылета файла', () => {
+    const s: Settings = { ...DEFAULT_SETTINGS, marks: marks({ crop: true }) }
+    const r = resolve(s, withBleed(4))
+    expect(r.marginMm).toBe(6)
+    const crop = r.job.marks[0]
+    if (crop?.kind !== 'crop') throw new Error('нет метки реза')
+    expect(toMm(crop.offset)).toBeCloseTo(4, 6)
   })
 })

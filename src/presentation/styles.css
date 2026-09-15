@@ -24,7 +24,7 @@
  * чёрное — то, что выбрано, серое — всё остальное.
  */
 body {
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1.4;
   background: #fff;
   color: var(--color-ink);

@@ -187,7 +187,15 @@ export const WorkScreen = ({
   const sheetCount = built.ok ? Math.ceil(built.value.sheets.length / sides) : 0
   const current = Math.min(state.sheet, Math.max(0, sheetCount - 1))
   const back = sides === 2 && state.back
-  const shown = built.ok ? built.value.sheets[current * sides + (back ? 1 : 0)] : undefined
+  // Стрелки идут по всем сторонам подряд: лицо, оборот, следующий лист. Иначе без пробела
+  // видна только половина полос брошюры. Пробел переворачивает текущий лист.
+  const sideCount = built.ok ? built.value.sheets.length : 0
+  const sideIndex = Math.min(current * sides + (back ? 1 : 0), Math.max(0, sideCount - 1))
+  const goToSide = (index: number) => {
+    const clamped = Math.min(Math.max(index, 0), Math.max(0, sideCount - 1))
+    show(Math.floor(clamped / sides), clamped % sides === 1)
+  }
+  const shown = built.ok ? built.value.sheets[sideIndex] : undefined
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -198,22 +206,25 @@ export const WorkScreen = ({
       if (e.target instanceof HTMLInputElement) return
       // Пробел на кнопке, куда пришли с клавиатуры, нажимает её, а не листает.
       if (e.key === ' ' && e.target instanceof HTMLButtonElement) return
-      if (e.key === 'ArrowRight') show(Math.min(current + 1, sheetCount - 1), back)
-      else if (e.key === 'ArrowLeft') show(Math.max(current - 1, 0), back)
+      if (e.key === 'ArrowRight') goToSide(sideIndex + 1)
+      else if (e.key === 'ArrowLeft') goToSide(sideIndex - 1)
       else if (e.key === ' ' && sides === 2) show(current, !back)
       else return
       e.preventDefault()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [current, sheetCount, back, sides, show, about, onAbout])
+  })
 
   const size = info.uniformSize
   const sheetWMm = Math.round(toMm(resolved.sheet.size.w) * 10) / 10
   const sheetHMm = Math.round(toMm(resolved.sheet.size.h) * 10) / 10
   const exporting = state.exporting
   const marksOn = s.marks.crop || (s.marks.fold && s.scheme === 'booklet') || s.marks.registration
-  const marginTooSmall = s.marginMm !== 'auto' && s.marginMm < neededMarginMm(s)
+  const marginTooSmall = s.marginMm !== 'auto' && s.marginMm < neededMarginMm(s, resolved.bleedMm)
+  // Пустой блок предупреждений не должен добавлять отбивку перед экспортом.
+  const hasNotes =
+    marginTooSmall || (built.ok && (built.value.warnings.length > 0 || resolved.scale < 1))
 
   const fileLine = dragging ? (
     <span>drop to open another</span>
@@ -256,23 +267,6 @@ export const WorkScreen = ({
           />
         </Row>
         <Row>
-          <Choice
-            value={resolved.sheet.orientation}
-            options={[
-              ['portrait', 'portrait'],
-              ['landscape', 'landscape'],
-            ]}
-            onChange={(orientation) => {
-              if (orientation === resolved.sheet.orientation) return
-              if (s.format === 'custom') {
-                update({ customWMm: s.customHMm, customHMm: s.customWMm })
-              } else {
-                update({ orientation, format: resolved.sheet.format })
-              }
-            }}
-          />
-        </Row>
-        <Row>
           <span>
             {s.format === 'auto' && <span className="text-mute">{resolved.sheet.format}, </span>}
             <Num
@@ -297,6 +291,23 @@ export const WorkScreen = ({
             <Unit />
           </span>
         </Row>
+        <Row>
+          <Choice
+            value={resolved.sheet.orientation}
+            options={[
+              ['portrait', 'portrait'],
+              ['landscape', 'landscape'],
+            ]}
+            onChange={(orientation) => {
+              if (orientation === resolved.sheet.orientation) return
+              if (s.format === 'custom') {
+                update({ customWMm: s.customHMm, customHMm: s.customWMm })
+              } else {
+                update({ orientation, format: resolved.sheet.format })
+              }
+            }}
+          />
+        </Row>
         <Row label="margin">
           <span className="inline-flex gap-x-[0.6em]">
             <Act active={s.marginMm === 'auto'} onClick={() => update({ marginMm: 'auto' })}>
@@ -319,13 +330,21 @@ export const WorkScreen = ({
           <Unit />
         </Row>
         <Row label="bleed">
-          <Num
-            label="bleed"
-            max={20}
-            value={s.bleedMm}
-            onChange={(bleedMm) => update({ bleedMm })}
-          />
-          <Unit />
+          <span className="inline-flex gap-x-[0.6em]">
+            <Act active={s.bleedMm === 'auto'} onClick={() => update({ bleedMm: 'auto' })}>
+              auto
+            </Act>
+            <span>
+              <Num
+                label="bleed"
+                max={20}
+                muted={s.bleedMm === 'auto'}
+                value={resolved.bleedMm}
+                onChange={(bleedMm) => update({ bleedMm })}
+              />
+              <Unit />
+            </span>
+          </span>
         </Row>
         {info.uniformSize === null && (
           <Row label="sizes">
@@ -354,34 +373,36 @@ export const WorkScreen = ({
         </Row>
       </div>
 
-      <div className="mt-[1lh] flex flex-col">
-        {built.ok &&
-          built.value.warnings.map((w) => (
-            <span key={w.kind}>
-              {warningText(w)}
-              {w.kind === 'MixedPageSizes' && (
-                <>
-                  {'  '}
-                  <Act onClick={() => update({ normalizeSizes: true })}>
-                    <u>align</u>
-                  </Act>
-                </>
-              )}
+      {hasNotes && (
+        <div className="mt-[1lh] flex flex-col">
+          {built.ok &&
+            built.value.warnings.map((w) => (
+              <span key={w.kind}>
+                {warningText(w)}
+                {w.kind === 'MixedPageSizes' && (
+                  <>
+                    {'  '}
+                    <Act onClick={() => update({ normalizeSizes: true })}>
+                      <u>align</u>
+                    </Act>
+                  </>
+                )}
+              </span>
+            ))}
+          {built.ok && resolved.scale < 1 && (
+            <span>pages scaled to {Math.floor(resolved.scale * 100)}% to fit the sheet</span>
+          )}
+          {marginTooSmall && (
+            <span>
+              {marksOn ? 'marks don’t fit in the margin' : 'bleed doesn’t fit in the margin'}
+              {'  '}
+              <Act onClick={() => update({ marginMm: 'auto' })}>
+                <u>auto</u>
+              </Act>
             </span>
-          ))}
-        {built.ok && resolved.scale < 1 && (
-          <span>pages scaled to {Math.floor(resolved.scale * 100)}% to fit the sheet</span>
-        )}
-        {marginTooSmall && (
-          <span>
-            {marksOn ? 'marks don’t fit in the margin' : 'bleed doesn’t fit in the margin'}
-            {'  '}
-            <Act onClick={() => update({ marginMm: 'auto' })}>
-              <u>auto</u>
-            </Act>
-          </span>
-        )}
-      </div>
+          )}
+        </div>
+      )}
       {/* Экспорт — последний шаг после параметров и предупреждений о них. */}
       <div className="mt-[1lh] flex flex-wrap gap-x-[1.2em] whitespace-pre">
         {exporting.kind === 'running' ? (
@@ -418,19 +439,19 @@ export const WorkScreen = ({
           handle={doc.handle}
         >
           <nav className="flex gap-x-[1.2em]">
-            <Act active={false} disabled={current === 0} onClick={() => show(current - 1, back)}>
+            <Act active={false} disabled={sideIndex === 0} onClick={() => goToSide(sideIndex - 1)}>
               ‹
             </Act>
             <span>
-              {current + 1} / {sheetCount}
+              {sideIndex + 1} / {sideCount}
             </span>
             {sides === 2 && (
               <Act onClick={() => show(current, !back)}>{back ? 'back' : 'front'}</Act>
             )}
             <Act
               active={false}
-              disabled={current >= sheetCount - 1}
-              onClick={() => show(current + 1, back)}
+              disabled={sideIndex >= sideCount - 1}
+              onClick={() => goToSide(sideIndex + 1)}
             >
               ›
             </Act>

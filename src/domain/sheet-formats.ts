@@ -5,17 +5,18 @@ import { gridShapeFor, plan } from './plan.js'
 import { isOk } from './result.js'
 import { mm } from './units.js'
 
-export type FormatName = 'a4' | 'a3' | 'sra3'
+export type FormatName = 'a4' | 'sra4' | 'a3' | 'sra3'
 export type Orientation = 'portrait' | 'landscape'
 
 /** Форматы в книжной ориентации, от меньшего к большему. */
 export const FORMATS: Readonly<Record<FormatName, Size>> = {
   a4: size(mm(210), mm(297)),
+  sra4: size(mm(225), mm(320)),
   a3: size(mm(297), mm(420)),
   sra3: size(mm(320), mm(450)),
 }
 
-export const FORMAT_NAMES: readonly FormatName[] = ['a4', 'a3', 'sra3']
+export const FORMAT_NAMES: readonly FormatName[] = ['a4', 'sra4', 'a3', 'sra3']
 
 export const oriented = (format: Size, orientation: Orientation): Size => {
   const short = Math.min(format.w, format.h)

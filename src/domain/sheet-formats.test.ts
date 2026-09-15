@@ -9,6 +9,7 @@ const docOf = (wMm: number, hMm: number, pageCount = 8): DocumentInfo => {
     trim: { x: pt(0), y: pt(0), w: mm(wMm), h: mm(hMm) },
     media: { x: pt(0), y: pt(0), w: mm(wMm), h: mm(hMm) },
     hasTrimBox: false,
+    bleed: null,
   }
   return {
     pageCount,
@@ -42,6 +43,14 @@ describe('подбор листа', () => {
   it('поле под метки выталкивает брошюру из A5 на следующий формат', () => {
     const withMargin: Job = { ...booklet, sheet: { ...booklet.sheet, margin: mm(10) } }
     expect(pickSheet(withMargin, docOf(148, 210)).format).toBe('a3')
+  })
+
+  it('SRA4 стоит между A4 и A3: разворот A5 с полем в пять миллиметров ложится на него', () => {
+    const withMargin: Job = { ...booklet, sheet: { ...booklet.sheet, margin: mm(5) } }
+    expect(pickSheet(withMargin, docOf(148, 210))).toMatchObject({
+      format: 'sra4',
+      orientation: 'landscape',
+    })
   })
 
   it('из двух годных ориентаций берёт ту, где полосе просторнее', () => {

@@ -38,6 +38,25 @@ describe('чтение документа', () => {
     reader.close(r.value.handle)
   })
 
+  it('BleedBox читается как прямоугольник вылета вокруг линии реза', () => {
+    const r = reader.open(
+      makeNumberedPdf({ pageCount: 1, width: 200, height: 300, bleed: 20, bleedBox: 8.5 }),
+    )
+    if (!isOk(r)) throw new Error('не открылось')
+    const page = r.value.info.pages[0]
+    if (page?.bleed === null || page?.bleed === undefined) throw new Error('нет вылета')
+    expect(page.trim.x - page.bleed.x).toBeCloseTo(8.5, 3)
+    expect(page.bleed.w).toBeCloseTo(217, 3)
+    reader.close(r.value.handle)
+  })
+
+  it('без BleedBox вылета из файла нет, даже если за линией реза есть место', () => {
+    const r = reader.open(makeNumberedPdf({ pageCount: 1, width: 200, height: 300, bleed: 20 }))
+    if (!isOk(r)) throw new Error('не открылось')
+    expect(r.value.info.pages[0]?.bleed).toBeNull()
+    reader.close(r.value.handle)
+  })
+
   it('без TrimBox обрезным считается CropBox', () => {
     const r = reader.open(makeNumberedPdf({ pageCount: 1, width: 200, height: 200 }))
     if (!isOk(r)) throw new Error('не открылось')

@@ -1,3 +1,4 @@
+import { fileBleed } from '../domain/bleed.js'
 import type { Binding } from '../domain/creep.js'
 import { type Size, size } from '../domain/geometry.js'
 import type { DocumentInfo, Job, Scheme } from '../domain/job.js'
@@ -12,7 +13,7 @@ import {
   pickSheet,
   roominess,
 } from '../domain/sheet-formats.js'
-import { mm, pt } from '../domain/units.js'
+import { mm, pt, toMm } from '../domain/units.js'
 
 export type SchemeKind = Scheme['kind']
 
@@ -38,7 +39,8 @@ export type Settings = {
   /** `auto` — ровно столько, сколько нужно вылету и включённым меткам. */
   readonly marginMm: number | 'auto'
   readonly gapMm: number
-  readonly bleedMm: number
+  /** `auto` — вылет, объявленный в файле (BleedBox); без него ноль. */
+  readonly bleedMm: number | 'auto'
   readonly normalizeSizes: boolean
   readonly marks: { readonly crop: boolean; readonly fold: boolean; readonly registration: boolean }
 }
@@ -58,22 +60,26 @@ export const DEFAULT_SETTINGS: Settings = {
   customHMm: 297,
   marginMm: 'auto',
   gapMm: 0,
-  bleedMm: 0,
+  bleedMm: 'auto',
   normalizeSizes: false,
   marks: { crop: false, fold: false, registration: false },
 }
 
 /**
  * Геометрия меток в интерфейс не выведена: для типографии это привычные величины.
- * Отступ метки реза не меньше вылета, иначе метка ляжет на вылет и напечатается
- * поверх фона.
+ * Метки реза целиком помещаются в пять миллиметров поля: отступ два, штрих три. Отступ
+ * не меньше вылета, иначе метка ляжет на вылет и напечатается поверх фона; штрих при этом
+ * укорачивается, чтобы поле осталось прежним, но не короче двух миллиметров.
  */
-const CROP_LENGTH_MM = 5
-const CROP_OFFSET_MM = 3
+const CROP_REACH_MM = 5
+const CROP_OFFSET_MM = 2
+const CROP_MIN_LENGTH_MM = 2
 const FOLD_LENGTH_MM = 5
 const PEN = pt(0.25)
 
-const cropOffsetMm = (s: Settings) => Math.max(CROP_OFFSET_MM, s.bleedMm)
+const cropOffsetMm = (bleedMm: number) => Math.max(CROP_OFFSET_MM, bleedMm)
+const cropLengthMm = (bleedMm: number) =>
+  Math.max(CROP_MIN_LENGTH_MM, CROP_REACH_MM - cropOffsetMm(bleedMm))
 
 const schemeOf = (s: Settings): Scheme => {
   switch (s.scheme) {
@@ -88,10 +94,15 @@ const schemeOf = (s: Settings): Scheme => {
   }
 }
 
-const marksOf = (s: Settings): readonly MarkSpec[] => {
+const marksOf = (s: Settings, bleedMm: number): readonly MarkSpec[] => {
   const marks: MarkSpec[] = []
   if (s.marks.crop) {
-    marks.push({ kind: 'crop', length: mm(CROP_LENGTH_MM), offset: mm(cropOffsetMm(s)), pen: PEN })
+    marks.push({
+      kind: 'crop',
+      length: mm(cropLengthMm(bleedMm)),
+      offset: mm(cropOffsetMm(bleedMm)),
+      pen: PEN,
+    })
   }
   if (s.marks.fold) marks.push({ kind: 'fold', length: mm(FOLD_LENGTH_MM), pen: PEN })
   if (s.marks.registration) marks.push({ kind: 'registration', radius: mm(2.5), pen: PEN })
@@ -99,10 +110,13 @@ const marksOf = (s: Settings): readonly MarkSpec[] => {
 }
 
 /** Поле, в которое помещаются вылет и все включённые метки. */
-export const neededMarginMm = (s: Settings): number =>
+export const neededMarginMm = (
+  s: Settings,
+  bleedMm: number = s.bleedMm === 'auto' ? 0 : s.bleedMm,
+): number =>
   Math.max(
-    s.bleedMm,
-    s.marks.crop ? cropOffsetMm(s) + CROP_LENGTH_MM : 0,
+    bleedMm,
+    s.marks.crop ? cropOffsetMm(bleedMm) + cropLengthMm(bleedMm) : 0,
     s.marks.fold && s.scheme === 'booklet' ? FOLD_LENGTH_MM : 0,
     s.marks.registration ? MIN_MARGIN_FOR_REGISTRATION_MM : 0,
   )
@@ -129,10 +143,14 @@ const sheetOf = (s: Settings, draft: Job, doc: DocumentInfo): ResolvedSheet => {
   }
 }
 
+/** Вылет файла в миллиметрах с точностью до десятой: столько показывает интерфейс. */
+const fileBleedMm = (doc: DocumentInfo): number => Math.round(toMm(fileBleed(doc)) * 10) / 10
+
 export type Resolved = {
   readonly job: Job
   readonly sheet: ResolvedSheet
   readonly marginMm: number
+  readonly bleedMm: number
   /** Масштаб самой большой полосы: 1, если полосы влезли как есть. */
   readonly scale: number
   readonly plan: Result<Plan, PlanError>
@@ -144,24 +162,26 @@ export type Resolved = {
  * они вписываются: спрашивать человека не о чем, а масштаб показывается рядом.
  */
 export const resolve = (s: Settings, doc: DocumentInfo): Resolved => {
-  const marginMm = s.marginMm === 'auto' ? neededMarginMm(s) : s.marginMm
+  const bleedMm = s.bleedMm === 'auto' ? fileBleedMm(doc) : s.bleedMm
+  const marginMm = s.marginMm === 'auto' ? neededMarginMm(s, bleedMm) : s.marginMm
   const draft: Job = {
     scheme: schemeOf(s),
     sheet: { size: FORMATS.a4, margin: mm(marginMm), gap: mm(s.gapMm) },
-    source: { bleed: mm(s.bleedMm), scaling: 'actual', normalizeSizes: s.normalizeSizes },
-    marks: marksOf(s),
+    source: { bleed: mm(bleedMm), scaling: 'actual', normalizeSizes: s.normalizeSizes },
+    marks: marksOf(s, bleedMm),
   }
   const sheet = sheetOf(s, draft, doc)
   const actual: Job = { ...draft, sheet: { ...draft.sheet, size: sheet.size } }
   const asIs = plan(actual, doc)
   if (asIs.ok || asIs.error.kind !== 'DoesNotFit') {
-    return { job: actual, sheet, marginMm, scale: 1, plan: asIs }
+    return { job: actual, sheet, marginMm, bleedMm, scale: 1, plan: asIs }
   }
   const fitted: Job = { ...actual, source: { ...actual.source, scaling: 'fit' } }
   return {
     job: fitted,
     sheet,
     marginMm,
+    bleedMm,
     scale: roominess(fitted, doc, sheet.size),
     plan: plan(fitted, doc),
   }

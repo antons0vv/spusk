@@ -52,7 +52,13 @@ describe('интерфейс в браузере', () => {
   it('брошюра по умолчанию: шестнадцать полос дают восемь листов в порядке сшивки', async () => {
     await drop('zine.pdf', makeNumberedPdf({ pageCount: 16, ...A5 }))
     await button('export').waitFor()
-    expect(await page.getByText('1 / 4').count()).toBe(1)
+    // Счётчик идёт по сторонам: 16 полос брошюры — 4 листа по две стороны, 8 сторон.
+    expect(await page.getByText('1 / 8').count()).toBe(1)
+    await page.keyboard.press('ArrowRight')
+    await page.getByText('2 / 8').waitFor()
+    expect(await button('back').count()).toBe(1)
+    await page.keyboard.press('ArrowLeft')
+    await page.getByText('1 / 8').waitFor()
     const sheets = readBack(await exported())
     expect(sheets).toHaveLength(8)
     const first = sheets[0]

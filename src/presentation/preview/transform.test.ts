@@ -13,6 +13,7 @@ const doc: DocumentInfo = {
     trim: { x: pt(0), y: pt(0), w: mm(148.5), h: mm(210) },
     media: { x: pt(0), y: pt(0), w: mm(148.5), h: mm(210) },
     hasTrimBox: false,
+    bleed: null,
   })),
   uniformSize: size(mm(148.5), mm(210)),
 }

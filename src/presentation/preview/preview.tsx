@@ -17,8 +17,12 @@ import {
 const HAIR = '#dcdcdc'
 const WASH = '#f3f3f3'
 
-/** Под навигацию под листом: отбивка и строка. Интерлиньяж из styles.css, 20 × 1.4. */
-const FOOTER = 2 * 28
+/**
+ * Под навигацию под листом: отбивка и строка. Интерлиньяж берётся из вёрстки, а не
+ * числом: кегль задан в одном месте, в styles.css.
+ */
+const footerHeight = (): number =>
+  2 * (Number.parseFloat(getComputedStyle(document.body).lineHeight) || 0)
 
 const useBox = (ref: React.RefObject<HTMLElement | null>): Box => {
   const [box, setBox] = useState<Box>({ w: 0, h: 0 })
@@ -104,7 +108,7 @@ export const Preview = ({
   const box = useBox(holder)
   const [loaded, setLoaded] = useState(0)
 
-  const fitted = fitView(size, { w: box.w, h: Math.max(0, box.h - FOOTER) })
+  const fitted = fitView(size, { w: box.w, h: Math.max(0, box.h - footerHeight()) })
   const cssW = Math.floor(size.w * fitted.scale)
   const cssH = Math.floor(size.h * fitted.scale)
 

@@ -18,6 +18,12 @@ import { err, ok, type Result } from '../../domain/result.js'
 const rectFrom = (box: mupdf.Rect, pageHeight: number): Rect =>
   rect(box[0], pageHeight - box[3], box[2] - box[0], box[3] - box[1])
 
+const intersect = (a: mupdf.Rect, b: mupdf.Rect): mupdf.Rect => {
+  const x0 = Math.max(a[0], b[0])
+  const y0 = Math.max(a[1], b[1])
+  return [x0, y0, Math.max(x0, Math.min(a[2], b[2])), Math.max(y0, Math.min(a[3], b[3]))]
+}
+
 const describe = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause)
 
@@ -29,13 +35,18 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
   for (let i = 0; i < doc.countPages(); i += 1) {
     const page = doc.loadPage(i)
     const hasTrimBox = !page.getObject().get('TrimBox').isNull()
+    const hasBleedBox = !page.getObject().get('BleedBox').isNull()
     // Приведённая полоса: движок строит её по CropBox, пересечённому с MediaBox,
     // и от неё же отсчитывает остальные коробки.
-    const height = page.getBounds()[3]
+    const bounds = page.getBounds()
+    const height = bounds[3]
     pages.push({
       trim: rectFrom(page.getBounds(hasTrimBox ? 'TrimBox' : 'CropBox'), height),
       media: rectFrom(page.getBounds('MediaBox'), height),
       hasTrimBox,
+      // За краем приведённой полосы содержимого нет: форма писателя его отсекает,
+      // поэтому объявленный вылет обрезается тем же краем.
+      bleed: hasBleedBox ? rectFrom(intersect(page.getBounds('BleedBox'), bounds), height) : null,
     })
   }
   const first = pages[0]

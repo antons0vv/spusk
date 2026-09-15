@@ -9,7 +9,7 @@ const A5 = { trim: rect(0, 0, 419.53, 595.28), media: rect(0, 0, 419.53, 595.28)
 
 const doc = (pageCount: number, hasTrim = true): DocumentInfo => ({
   pageCount,
-  pages: Array.from({ length: pageCount }, () => ({ ...A5, hasTrimBox: hasTrim })),
+  pages: Array.from({ length: pageCount }, () => ({ ...A5, hasTrimBox: hasTrim, bleed: null })),
   uniformSize: size(419.53, 595.28),
 })
 
@@ -70,6 +70,7 @@ describe('планировщик', () => {
         trim: rect(0, 0, 420.9455, 595.28),
         media: rect(0, 0, 420.9455, 595.28),
         hasTrimBox: true,
+        bleed: null,
       })),
       uniformSize: size(420.9455, 595.28),
     }
@@ -84,6 +85,7 @@ describe('планировщик', () => {
         trim: rect(0, 0, 420.965, 595.28),
         media: rect(0, 0, 420.965, 595.28),
         hasTrimBox: true,
+        bleed: null,
       })),
       uniformSize: size(420.965, 595.28),
     }
@@ -111,8 +113,8 @@ describe('планировщик', () => {
     const mixed: DocumentInfo = {
       pageCount: 2,
       pages: [
-        { trim: rect(0, 0, 400, 500), media: rect(0, 0, 400, 500), hasTrimBox: true },
-        { trim: rect(0, 0, 300, 400), media: rect(0, 0, 300, 400), hasTrimBox: true },
+        { trim: rect(0, 0, 400, 500), media: rect(0, 0, 400, 500), hasTrimBox: true, bleed: null },
+        { trim: rect(0, 0, 300, 400), media: rect(0, 0, 300, 400), hasTrimBox: true, bleed: null },
       ],
       uniformSize: null,
     }
@@ -135,8 +137,8 @@ describe('планировщик', () => {
     const mixed: DocumentInfo = {
       pageCount: 2,
       pages: [
-        { trim: rect(0, 0, 100, 100), media: rect(0, 0, 100, 100), hasTrimBox: true },
-        { trim: rect(0, 0, 900, 100), media: rect(0, 0, 900, 100), hasTrimBox: true },
+        { trim: rect(0, 0, 100, 100), media: rect(0, 0, 100, 100), hasTrimBox: true, bleed: null },
+        { trim: rect(0, 0, 900, 100), media: rect(0, 0, 900, 100), hasTrimBox: true, bleed: null },
       ],
       uniformSize: null,
     }
@@ -261,8 +263,8 @@ describe('планировщик', () => {
         pageCount: 2,
         // Вторая полоса целая: отказ обязан прийти и из-за одной испорченной.
         pages: [
-          { trim, media: rect(0, 0, 419.53, 595.28), hasTrimBox: true },
-          { ...A5, hasTrimBox: true },
+          { trim, media: rect(0, 0, 419.53, 595.28), hasTrimBox: true, bleed: null },
+          { ...A5, hasTrimBox: true, bleed: null },
         ],
         uniformSize: null,
       }

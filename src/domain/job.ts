@@ -1,6 +1,6 @@
 import type { PageGeometry, SourceSpec } from './assemble.js'
 import type { Binding } from './creep.js'
-import type { Size } from './geometry.js'
+import type { Rect, Size } from './geometry.js'
 import type { MarkSpec } from './marks.js'
 import type { Pt } from './units.js'
 
@@ -36,7 +36,11 @@ export type Job = {
   readonly marks: readonly MarkSpec[]
 }
 
-export type SourcePage = PageGeometry & { readonly hasTrimBox: boolean }
+export type SourcePage = PageGeometry & {
+  readonly hasTrimBox: boolean
+  /** BleedBox в пространстве полосы, обрезанный её краем; null, если файл его не объявил. */
+  readonly bleed: Rect | null
+}
 
 export type DocumentInfo = {
   readonly pageCount: number

@@ -2,7 +2,11 @@ import { fileBleed } from '../domain/bleed.js'
 import type { Binding } from '../domain/creep.js'
 import { type Size, size } from '../domain/geometry.js'
 import type { DocumentInfo, Job, Scheme } from '../domain/job.js'
-import { type MarkSpec, MIN_MARGIN_FOR_REGISTRATION_MM } from '../domain/marks.js'
+import {
+  type CropGeometry,
+  type MarkSpec,
+  MIN_MARGIN_FOR_REGISTRATION_MM,
+} from '../domain/marks.js'
 import { type Plan, type PlanError, plan } from '../domain/plan.js'
 import type { Result } from '../domain/result.js'
 import {
@@ -66,7 +70,8 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 /**
- * Геометрия меток в интерфейс не выведена: для типографии это привычные величины.
+ * Геометрия меток в интерфейс не выведена: для типографии это привычные величины. Если файл
+ * сам нарисовал метки реза, их числа важнее: см. `cropGeometry`.
  * Метки реза целиком помещаются в пять миллиметров поля: отступ два, штрих три. Отступ
  * не меньше вылета, иначе метка ляжет на вылет и напечатается поверх фона; штрих при этом
  * укорачивается, чтобы поле осталось прежним, но не короче двух миллиметров.
@@ -94,16 +99,22 @@ const schemeOf = (s: Settings): Scheme => {
   }
 }
 
-const marksOf = (s: Settings, bleedMm: number): readonly MarkSpec[] => {
-  const marks: MarkSpec[] = []
-  if (s.marks.crop) {
-    marks.push({
-      kind: 'crop',
-      length: mm(cropLengthMm(bleedMm)),
-      offset: mm(cropOffsetMm(bleedMm)),
-      pen: PEN,
-    })
+/**
+ * Метки реза рисуются числами файла, если он нарисовал их сам: так лист повторяет то, что
+ * человек видел в своей программе вёрстки. Отступ меньше вылета при этом не растёт — метку
+ * от фона вылета отбивает белая подложка из того же файла.
+ */
+const cropGeometry = (bleedMm: number, file: CropGeometry | null): CropGeometry =>
+  file ?? {
+    offset: mm(cropOffsetMm(bleedMm)),
+    length: mm(cropLengthMm(bleedMm)),
+    pen: PEN,
+    halo: null,
   }
+
+const marksOf = (s: Settings, bleedMm: number, file: CropGeometry | null): readonly MarkSpec[] => {
+  const marks: MarkSpec[] = []
+  if (s.marks.crop) marks.push({ kind: 'crop', ...cropGeometry(bleedMm, file) })
   if (s.marks.fold) marks.push({ kind: 'fold', length: mm(FOLD_LENGTH_MM), pen: PEN })
   if (s.marks.registration) marks.push({ kind: 'registration', radius: mm(2.5), pen: PEN })
   return marks
@@ -113,10 +124,15 @@ const marksOf = (s: Settings, bleedMm: number): readonly MarkSpec[] => {
 export const neededMarginMm = (
   s: Settings,
   bleedMm: number = s.bleedMm === 'auto' ? 0 : s.bleedMm,
+  fileMarks: CropGeometry | null = null,
 ): number =>
   Math.max(
     bleedMm,
-    s.marks.crop ? cropOffsetMm(bleedMm) + cropLengthMm(bleedMm) : 0,
+    !s.marks.crop
+      ? 0
+      : fileMarks === null
+        ? cropOffsetMm(bleedMm) + cropLengthMm(bleedMm)
+        : toMm(pt(fileMarks.offset + fileMarks.length)),
     s.marks.fold && s.scheme === 'booklet' ? FOLD_LENGTH_MM : 0,
     s.marks.registration ? MIN_MARGIN_FOR_REGISTRATION_MM : 0,
   )
@@ -163,12 +179,12 @@ export type Resolved = {
  */
 export const resolve = (s: Settings, doc: DocumentInfo): Resolved => {
   const bleedMm = s.bleedMm === 'auto' ? fileBleedMm(doc) : s.bleedMm
-  const marginMm = s.marginMm === 'auto' ? neededMarginMm(s, bleedMm) : s.marginMm
+  const marginMm = s.marginMm === 'auto' ? neededMarginMm(s, bleedMm, doc.cropMarks) : s.marginMm
   const draft: Job = {
     scheme: schemeOf(s),
     sheet: { size: FORMATS.a4, margin: mm(marginMm), gap: mm(s.gapMm) },
     source: { bleed: mm(bleedMm), scaling: 'actual', normalizeSizes: s.normalizeSizes },
-    marks: marksOf(s, bleedMm),
+    marks: marksOf(s, bleedMm, doc.cropMarks),
   }
   const sheet = sheetOf(s, draft, doc)
   const actual: Job = { ...draft, sheet: { ...draft.sheet, size: sheet.size } }

@@ -1,7 +1,7 @@
 import type { PageGeometry, SourceSpec } from './assemble.js'
 import type { Binding } from './creep.js'
 import type { Rect, Size } from './geometry.js'
-import type { MarkSpec } from './marks.js'
+import type { CropGeometry, MarkSpec } from './marks.js'
 import type { Pt } from './units.js'
 
 export type Scheme =
@@ -47,4 +47,6 @@ export type DocumentInfo = {
   readonly pages: readonly SourcePage[]
   /** null, если полосы разного размера. */
   readonly uniformSize: Size | null
+  /** Метки реза, которые файл нарисовал сам вокруг первой полосы; null, если их нет. */
+  readonly cropMarks: CropGeometry | null
 }

@@ -43,7 +43,7 @@ const threeUp = (margin: Pt, gap: Pt) => {
   return { sheet, grid, sheetSize, margin }
 }
 
-const CROP = { kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2) } as const
+const CROP = { kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2), halo: null } as const
 const FOLD = { kind: 'fold', length: mm(5), pen: pt(0.2) } as const
 
 const cropOf = (sheet: Sheet, grid: Grid, margin: Pt, folded: boolean, sheetSize = A4L) =>
@@ -104,6 +104,25 @@ describe('метки', () => {
     expect(verticalXs(marks)).toHaveLength(3)
     expect(horizontalYs(marks)).toHaveLength(2)
     expect(marks).toHaveLength(10)
+  })
+
+  it('белая подложка метки реза переходит в каждый её штрих, у метки сгиба подложки нет', () => {
+    const { sheet, grid, margin } = spread()
+    const marks = resolveMarks(
+      sheet,
+      spread().sheetSize,
+      grid,
+      [{ ...CROP, halo: pt(1.25) }, FOLD],
+      margin,
+      true,
+    )
+    const lines = marks.flatMap((m) => (m.kind === 'line' ? [m] : []))
+    const crop = lines.filter((m) => m.dash === null)
+    const fold = lines.filter((m) => m.dash !== null)
+    expect(crop.length).toBeGreaterThan(0)
+    expect(fold.length).toBeGreaterThan(0)
+    expect(crop.map((m) => m.halo)).toEqual(crop.map(() => pt(1.25)))
+    expect(fold.map((m) => m.halo)).toEqual(fold.map(() => null))
   })
 
   it('внутри блока полос меток реза нет', () => {
@@ -262,7 +281,7 @@ describe('метки', () => {
       sheet,
       A4L,
       grid,
-      [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2) }],
+      [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2), halo: null }],
       margin,
       false,
     )

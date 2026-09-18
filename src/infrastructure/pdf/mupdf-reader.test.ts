@@ -29,6 +29,33 @@ describe('чтение документа', () => {
     reader.close(r.value.handle)
   })
 
+  it('находит метки реза, которые файл нарисовал сам, вместе с их числами', () => {
+    const r = reader.open(
+      makeNumberedPdf({
+        pageCount: 2,
+        width: 200,
+        height: 300,
+        bleed: 21,
+        bleedBox: 8.5,
+        cropMarks: { offset: 6, length: 15, pen: 0.25, halo: 1.25 },
+      }),
+    )
+    if (!isOk(r)) throw new Error('не открылось')
+    const marks = r.value.info.cropMarks
+    expect(marks?.offset).toBeCloseTo(6, 2)
+    expect(marks?.length).toBeCloseTo(15, 2)
+    expect(marks?.pen).toBeCloseTo(0.25, 2)
+    expect(marks?.halo).toBeCloseTo(1.25, 2)
+    reader.close(r.value.handle)
+  })
+
+  it('поле без меток — это не метки', () => {
+    const r = reader.open(makeNumberedPdf({ pageCount: 1, width: 200, height: 300, bleed: 21 }))
+    if (!isOk(r)) throw new Error('не открылось')
+    expect(r.value.info.cropMarks).toBeNull()
+    reader.close(r.value.handle)
+  })
+
   it('видит TrimBox, когда он есть', () => {
     const r = reader.open(makeNumberedPdf({ pageCount: 1, width: 200, height: 200, bleed: 10 }))
     if (!isOk(r)) throw new Error('не открылось')

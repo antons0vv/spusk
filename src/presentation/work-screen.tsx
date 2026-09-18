@@ -221,7 +221,9 @@ export const WorkScreen = ({
   const sheetHMm = Math.round(toMm(resolved.sheet.size.h) * 10) / 10
   const exporting = state.exporting
   const marksOn = s.marks.crop || (s.marks.fold && s.scheme === 'booklet') || s.marks.registration
-  const marginTooSmall = s.marginMm !== 'auto' && s.marginMm < neededMarginMm(s, resolved.bleedMm)
+  const fileMarks = doc.info.cropMarks
+  const marginTooSmall =
+    s.marginMm !== 'auto' && s.marginMm < neededMarginMm(s, resolved.bleedMm, fileMarks)
   // Пустой блок предупреждений не должен добавлять отбивку перед экспортом.
   const hasNotes =
     marginTooSmall || (built.ok && (built.value.warnings.length > 0 || resolved.scale < 1))
@@ -371,6 +373,13 @@ export const WorkScreen = ({
             onChange={(key, on) => update({ marks: { ...s.marks, [key]: on } })}
           />
         </Row>
+        {s.marks.crop && fileMarks !== null && (
+          <Row>
+            <span className="text-mute">
+              from file: {mmText(fileMarks.offset)} mm gap, {mmText(fileMarks.length)} mm long
+            </span>
+          </Row>
+        )}
       </div>
 
       {hasNotes && (

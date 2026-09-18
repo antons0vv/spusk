@@ -11,6 +11,7 @@ const doc = (pageCount: number, hasTrim = true): DocumentInfo => ({
   pageCount,
   pages: Array.from({ length: pageCount }, () => ({ ...A5, hasTrimBox: hasTrim, bleed: null })),
   uniformSize: size(419.53, 595.28),
+  cropMarks: null,
 })
 
 const bookletJob = (overrides: Partial<Job> = {}): Job => ({
@@ -73,6 +74,7 @@ describe('планировщик', () => {
         bleed: null,
       })),
       uniformSize: size(420.9455, 595.28),
+      cropMarks: null,
     }
     expect(isOk(plan(bookletJob(), barely))).toBe(true)
   })
@@ -88,6 +90,7 @@ describe('планировщик', () => {
         bleed: null,
       })),
       uniformSize: size(420.965, 595.28),
+      cropMarks: null,
     }
     expect(isErr(plan(bookletJob(), tooBig))).toBe(true)
   })
@@ -117,6 +120,7 @@ describe('планировщик', () => {
         { trim: rect(0, 0, 300, 400), media: rect(0, 0, 300, 400), hasTrimBox: true, bleed: null },
       ],
       uniformSize: null,
+      cropMarks: null,
     }
     const job = bookletJob({
       scheme: { kind: 'booklet', folio: 'all', binding: 'left', creepPerSheet: pt(0) },
@@ -141,6 +145,7 @@ describe('планировщик', () => {
         { trim: rect(0, 0, 900, 100), media: rect(0, 0, 900, 100), hasTrimBox: true, bleed: null },
       ],
       uniformSize: null,
+      cropMarks: null,
     }
     const r = plan(bookletJob(), mixed)
     expect(isErr(r)).toBe(true)
@@ -193,7 +198,7 @@ describe('планировщик', () => {
     const job = bookletJob({
       sheet: { size: size(841.89, 595.28), margin: mm(10), gap: pt(0) },
       source: { bleed: pt(0), scaling: 'fit', normalizeSizes: false },
-      marks: [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2) }],
+      marks: [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2), halo: null }],
     })
     const r = plan(job, doc(8))
     if (!isOk(r)) throw new Error('план не построен')
@@ -267,6 +272,7 @@ describe('планировщик', () => {
           { ...A5, hasTrimBox: true, bleed: null },
         ],
         uniformSize: null,
+        cropMarks: null,
       }
       const r = plan(bookletJob(), damaged)
       expect(isErr(r)).toBe(true)

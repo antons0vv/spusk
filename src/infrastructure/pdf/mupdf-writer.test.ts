@@ -195,7 +195,7 @@ describe('писатель', () => {
       ...bookletJob(),
       sheet: { size: size(841.89, 595.28), margin: mm(10), gap: pt(0) },
       source: { bleed: pt(0), scaling: 'fit', normalizeSizes: false },
-      marks: [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2) }],
+      marks: [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2), halo: null }],
     }
     const sheets = readBack(imposedFrom(source, job))
     expect(sheets).toHaveLength(2)
@@ -248,7 +248,7 @@ describe('писатель', () => {
       ...bookletJob(),
       sheet: { size: size(841.89, 595.28), margin: mm(10), gap: pt(0) },
       source: { bleed: mm(3), scaling: 'fit', normalizeSizes: false },
-      marks: [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2) }],
+      marks: [{ kind: 'crop', length: mm(5), offset: mm(3), pen: pt(0.2), halo: null }],
     }
     const sheets = readBack(imposed(4, job))
     expect(sheets).toHaveLength(2)

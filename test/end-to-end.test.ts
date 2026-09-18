@@ -106,7 +106,7 @@ describe('сквозной путь', () => {
       scheme: { kind: 'stepRepeat', rows: 5, cols: 2, copies: 10 },
       sheet: { size: size(595.28, 841.89), margin: mm(10), gap: mm(6) },
       source: { bleed: mm(3), scaling: 'fit', normalizeSizes: false },
-      marks: [{ kind: 'crop', length: mm(4), offset: mm(3), pen: pt(0.2) }],
+      marks: [{ kind: 'crop', length: mm(4), offset: mm(3), pen: pt(0.2), halo: null }],
     }
     const sheets = readBack(run(makeNumberedPdf({ pageCount: 1, width: 241, height: 155 }), job))
     expect(sheets).toHaveLength(1)

@@ -10,11 +10,21 @@ export type ResolvedMark =
       readonly to: Point
       readonly pen: Pt
       readonly dash: readonly number[] | null
+      /** Белая линия под штрихом, толщиной больше пера: отбивает метку от фона вылета. */
+      readonly halo: Pt | null
     }
   | { readonly kind: 'registration'; readonly center: Point; readonly radius: Pt; readonly pen: Pt }
 
+/** Метка реза: отступ от линии реза, длина штриха, перо и белая подложка под штрихом. */
+export type CropGeometry = {
+  readonly offset: Pt
+  readonly length: Pt
+  readonly pen: Pt
+  readonly halo: Pt | null
+}
+
 export type MarkSpec =
-  | { readonly kind: 'crop'; readonly length: Pt; readonly offset: Pt; readonly pen: Pt }
+  | ({ readonly kind: 'crop' } & CropGeometry)
   | { readonly kind: 'fold'; readonly length: Pt; readonly pen: Pt }
   | { readonly kind: 'registration'; readonly radius: Pt; readonly pen: Pt }
 
@@ -25,8 +35,13 @@ const FOLD_DASH: readonly number[] = [3, 3]
 
 const point = (x: number, y: number): Point => ({ x: pt(x), y: pt(y) })
 
-const line = (from: Point, to: Point, pen: Pt, dash: readonly number[] | null) =>
-  ({ kind: 'line', from, to, pen, dash }) as const
+const line = (
+  from: Point,
+  to: Point,
+  pen: Pt,
+  dash: readonly number[] | null,
+  halo: Pt | null = null,
+) => ({ kind: 'line', from, to, pen, dash, halo }) as const
 
 /** Сотая пункта: с этой точностью совпадают линии реза соседних полос при нулевом зазоре. */
 const SAME_LINE = 0.01
@@ -118,14 +133,14 @@ const cropMarksFor = (
   if (block === null) return []
   const { xs, ys } = cutLinesOf(sheet, grid, folded)
   const marks: ResolvedMark[] = []
-  const { offset, length, pen } = spec
+  const { offset, length, pen, halo } = spec
   for (const x of xs) {
     for (const [edge, direction] of [
       [block.top, 1],
       [block.bottom, -1],
     ] as const) {
       const span = outward(edge, direction, offset, length, sheetSize.h)
-      if (span !== null) marks.push(line(point(x, span[0]), point(x, span[1]), pen, null))
+      if (span !== null) marks.push(line(point(x, span[0]), point(x, span[1]), pen, null, halo))
     }
   }
   for (const y of ys) {
@@ -134,7 +149,7 @@ const cropMarksFor = (
       [block.left, -1],
     ] as const) {
       const span = outward(edge, direction, offset, length, sheetSize.w)
-      if (span !== null) marks.push(line(point(span[0], y), point(span[1], y), pen, null))
+      if (span !== null) marks.push(line(point(span[0], y), point(span[1], y), pen, null, halo))
     }
   }
   return marks

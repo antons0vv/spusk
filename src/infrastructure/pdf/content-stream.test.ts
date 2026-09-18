@@ -3,6 +3,15 @@ import type { ResolvedMark } from '../../domain/marks.js'
 import { pt } from '../../domain/units.js'
 import { formatNumber, markOps } from './content-stream.js'
 
+const haloLine = (y: number): Extract<ResolvedMark, { kind: 'line' }> => ({
+  kind: 'line',
+  from: { x: pt(10), y: pt(y) },
+  to: { x: pt(30), y: pt(y) },
+  pen: pt(0.25),
+  dash: null,
+  halo: pt(1.25),
+})
+
 describe('операторы содержимого', () => {
   it('числа пишутся без хвостовых нулей', () => {
     expect(formatNumber(0.00001)).toBe('0')
@@ -24,6 +33,7 @@ describe('операторы содержимого', () => {
         to: { x: pt(30), y: pt(20) },
         pen: pt(0.2),
         dash: null,
+        halo: null,
       },
     ]
     const ops = markOps(marks)
@@ -41,9 +51,29 @@ describe('операторы содержимого', () => {
         to: { x: pt(0), y: pt(10) },
         pen: pt(0.2),
         dash: [3, 3],
+        halo: null,
       },
     ]
     expect(markOps(marks)).toContain('[3 3] 0 d')
+  })
+
+  it('подложка рисуется белой линией своей толщины раньше самого штриха', () => {
+    const ops = markOps([haloLine(20)])
+    expect(ops.indexOf('1 1 1 RG')).toBeGreaterThan(-1)
+    expect(ops.indexOf('1 1 1 RG')).toBeLessThan(ops.indexOf('1.25 w'))
+    expect(ops.indexOf('1.25 w')).toBeLessThan(ops.indexOf('0.25 w'))
+    // Тот же отрезок обводится дважды: подложкой и штрихом.
+    expect(ops.split('10 20 m')).toHaveLength(3)
+  })
+
+  it('подложки всех штрихов идут раньше штрихов: чужая подложка не перекроет метку', () => {
+    const ops = markOps([haloLine(20), haloLine(40)])
+    expect(ops.split('1.25 w')).toHaveLength(3)
+    expect(ops.lastIndexOf('1.25 w')).toBeLessThan(ops.indexOf('0.25 w'))
+  })
+
+  it('штрих без подложки не рисует белого', () => {
+    expect(markOps([{ ...haloLine(20), halo: null }])).not.toContain('1 1 1 RG')
   })
 
   it('метка приводки рисует круг и крест', () => {

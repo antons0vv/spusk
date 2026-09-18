@@ -16,6 +16,7 @@ const doc: DocumentInfo = {
     bleed: null,
   })),
   uniformSize: size(mm(148.5), mm(210)),
+  cropMarks: null,
 }
 
 const job: Job = {

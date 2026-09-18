@@ -45,10 +45,27 @@ const circleOps = (cx: number, cy: number, r: number): string => {
   ].join('\n')
 }
 
-/** Операторы отрисовки меток. Цвет всегда чистый чёрный. */
+/**
+ * Операторы отрисовки меток. Штрихи чистые чёрные. Белые подложки идут раньше всех штрихов:
+ * так подложка одной метки не ляжет поверх другой.
+ */
 export const markOps = (marks: readonly ResolvedMark[]): string => {
   if (marks.length === 0) return ''
-  const ops: string[] = ['q', '0 0 0 RG']
+  const ops: string[] = []
+  const halos = marks.flatMap((m) =>
+    m.kind === 'line' && m.halo !== null ? [{ from: m.from, to: m.to, width: m.halo }] : [],
+  )
+  if (halos.length > 0) {
+    ops.push('q', '1 1 1 RG', '[] 0 d')
+    for (const halo of halos) {
+      ops.push(`${n(halo.width)} w`)
+      ops.push(`${n(halo.from.x)} ${n(halo.from.y)} m`)
+      ops.push(`${n(halo.to.x)} ${n(halo.to.y)} l`)
+      ops.push('S')
+    }
+    ops.push('Q')
+  }
+  ops.push('q', '0 0 0 RG')
   for (const mark of marks) {
     if (mark.kind === 'line') {
       ops.push('q')

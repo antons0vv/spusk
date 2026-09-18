@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import * as mupdf from 'mupdf'
 import { type Browser, chromium, type Page } from 'playwright-core'
 import { createServer, type ViteDevServer } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -24,6 +25,23 @@ const exported = async (): Promise<Uint8Array> => {
   const [download] = await Promise.all([page.waitForEvent('download'), button('export').click()])
   const path = await download.path()
   return new Uint8Array(await readFile(path))
+}
+
+/** Операторы содержимого первого листа: по ним видно, чем нарисованы метки. */
+const contentsOf = (bytes: Uint8Array): string => {
+  const opened = mupdf.Document.openDocument(bytes, 'application/pdf').asPDF()
+  if (opened === null) throw new Error('экспорт не PDF')
+  // Сужение до PDF, иначе тип полосы остаётся общим и словаря у неё нет.
+  const doc: mupdf.PDFDocument = opened
+  const contents = doc.loadPage(0).getObject().get('Contents')
+  const streams = contents.isArray()
+    ? Array.from({ length: contents.length }, (_, i) => contents.get(i))
+    : [contents]
+  const text = streams
+    .map((stream) => new TextDecoder().decode(stream.readStream().asUint8Array()))
+    .join('\n')
+  doc.destroy()
+  return text
 }
 
 beforeAll(async () => {
@@ -75,5 +93,30 @@ describe('интерфейс в браузере', () => {
     const second = sheets[1]
     if (second === undefined) throw new Error('нет листа')
     expect(cellOf(second, 2, 2, 'bottom-P5')).toEqual({ row: 0, col: 0 })
+  }, 60_000)
+
+  it('файл со своими метками реза включает метки и рисует их числами файла', async () => {
+    // Метки InDesign по умолчанию: отступ 6 pt, штрих 15 pt, перо 0.25 pt, подложка 1.25 pt.
+    await drop(
+      'indesign.pdf',
+      makeNumberedPdf({
+        pageCount: 4,
+        ...A5,
+        bleed: 21,
+        bleedBox: 8.5,
+        cropMarks: { offset: 6, length: 15, pen: 0.25, halo: 1.25 },
+      }),
+    )
+    await page.getByText('from file: 2.1 mm gap, 5.3 mm long').waitFor()
+    expect(await button('crop').getAttribute('aria-pressed')).toBe('true')
+    expect(await page.getByLabel('margin', { exact: true }).inputValue()).toBe('7.41')
+    const ops = contentsOf(await exported())
+    expect(ops).toContain('1 1 1 RG')
+    expect(ops).toContain('1.25 w')
+  }, 60_000)
+
+  it('поле вручную уже меток файла даёт предупреждение', async () => {
+    await page.getByLabel('margin', { exact: true }).fill('6')
+    await page.getByText('marks don’t fit in the margin').waitFor()
   }, 60_000)
 })

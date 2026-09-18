@@ -15,6 +15,7 @@ const docOf = (wMm: number, hMm: number, pageCount = 8): DocumentInfo => {
     pageCount,
     pages: Array.from({ length: pageCount }, () => page),
     uniformSize: size(mm(wMm), mm(hMm)),
+    cropMarks: null,
   }
 }
 

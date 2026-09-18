@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { size } from '../domain/geometry.js'
 import type { DocumentInfo } from '../domain/job.js'
+import type { CropGeometry } from '../domain/marks.js'
 import { mm, pt, toMm } from '../domain/units.js'
 import { DEFAULT_SETTINGS, neededMarginMm, resolve, type Settings } from './settings.js'
 
@@ -13,9 +14,18 @@ const docOf = (wMm: number, hMm: number, pageCount = 16): DocumentInfo => ({
     bleed: null,
   })),
   uniformSize: size(mm(wMm), mm(hMm)),
+  cropMarks: null,
 })
 
 const a5 = docOf(148, 210)
+/** Метки реза, какими их кладёт InDesign по умолчанию. */
+const INDESIGN: CropGeometry = {
+  offset: mm(2.117),
+  length: mm(5.29),
+  pen: pt(0.25),
+  halo: pt(1.25),
+}
+const withFileMarks: DocumentInfo = { ...a5, cropMarks: INDESIGN }
 const marks = (on: Partial<Settings['marks']>): Settings['marks'] => ({
   crop: false,
   fold: false,
@@ -191,5 +201,26 @@ describe('вылет auto', () => {
     const crop = r.job.marks[0]
     if (crop?.kind !== 'crop') throw new Error('нет метки реза')
     expect(toMm(crop.offset)).toBeCloseTo(4, 6)
+  })
+
+  it('метки реза из файла рисуются его числами, даже если отступ меньше вылета', () => {
+    const s: Settings = { ...DEFAULT_SETTINGS, marks: marks({ crop: true }) }
+    expect(resolve(s, withFileMarks).job.marks).toEqual([{ kind: 'crop', ...INDESIGN }])
+    // Метка InDesign заходит на вылет, от фона её отбивает белая подложка: числа не трогаем.
+    expect(resolve({ ...s, bleedMm: 3 }, withFileMarks).job.marks).toEqual([
+      { kind: 'crop', ...INDESIGN },
+    ])
+  })
+
+  it('поле auto вмещает метки файла целиком: отступ плюс длина', () => {
+    const s: Settings = { ...DEFAULT_SETTINGS, marks: marks({ crop: true }) }
+    expect(resolve(s, withFileMarks).marginMm).toBeCloseTo(7.41, 2)
+    expect(neededMarginMm(s, 0, INDESIGN)).toBeCloseTo(7.41, 2)
+  })
+
+  it('выключенные метки реза не берут у файла ни чисел, ни поля', () => {
+    const r = resolve(DEFAULT_SETTINGS, withFileMarks)
+    expect(r.job.marks).toEqual([])
+    expect(r.marginMm).toBe(0)
   })
 })

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Notice, Screen } from './store.js'
 
 const NOTICE: Record<Notice, string> = {
-  none: 'drag a pdf here',
+  none: 'click or drop a pdf here',
   notPdf: 'not a pdf, try another',
   unreadable: 'can’t read this file, try another',
   crashed: 'too heavy for this browser, try a smaller file',

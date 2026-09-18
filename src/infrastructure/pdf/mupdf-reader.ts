@@ -5,9 +5,12 @@ import type {
   OpenError,
   OpenedDocument,
 } from '../../application/ports.js'
-import { type Rect, rect, size } from '../../domain/geometry.js'
+import { type Point, type Rect, rect, size } from '../../domain/geometry.js'
 import type { DocumentInfo, SourcePage } from '../../domain/job.js'
+import type { CropGeometry } from '../../domain/marks.js'
 import { err, ok, type Result } from '../../domain/result.js'
+import { pt } from '../../domain/units.js'
+import { cropMarksFrom, type Stroke } from './crop-marks.js'
 
 /**
  * Движок отдаёт коробки полосы в своём пространстве: начало в левом верхнем углу
@@ -27,11 +30,60 @@ const intersect = (a: mupdf.Rect, b: mupdf.Rect): mupdf.Rect => {
 const describe = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause)
 
+/**
+ * Отрезки всех обводок полосы в том же пространстве, что и коробки: из них ищутся метки
+ * реза, нарисованные самим файлом. Кривые меткой быть не могут и пропускаются.
+ */
+const strokesOf = (page: mupdf.Page, pageHeight: number): readonly Stroke[] => {
+  const strokes: Stroke[] = []
+  const device = new mupdf.Device({
+    strokePath(path, stroke, ctm) {
+      const scale = Math.sqrt(Math.abs(ctm[0] * ctm[3] - ctm[1] * ctm[2]))
+      const width = stroke.getLineWidth() * scale
+      const at = (x: number, y: number): Point => ({
+        x: pt(ctm[0] * x + ctm[2] * y + ctm[4]),
+        y: pt(pageHeight - (ctm[1] * x + ctm[3] * y + ctm[5])),
+      })
+      let last: Point | null = null
+      path.walk({
+        moveTo(x, y) {
+          last = at(x, y)
+        },
+        lineTo(x, y) {
+          const next = at(x, y)
+          if (last !== null) strokes.push({ from: last, to: next, width })
+          last = next
+        },
+      })
+    },
+  })
+  try {
+    page.run(device, mupdf.Matrix.identity)
+    device.close()
+  } finally {
+    device.destroy()
+  }
+  return strokes
+}
+
+/**
+ * Метки реза первой полосы. Битое содержимое не мешает открыть документ: полоса без
+ * разборчивых обводок просто считается полосой без меток.
+ */
+const cropMarksOf = (page: mupdf.Page, pageHeight: number, trim: Rect): CropGeometry | null => {
+  try {
+    return cropMarksFrom(strokesOf(page, pageHeight), trim)
+  } catch {
+    return null
+  }
+}
+
 /** Сотая доля пункта: разные генераторы PDF округляют размеры по-своему. */
 const SAME = 0.01
 
 const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
   const pages: SourcePage[] = []
+  let cropMarks: CropGeometry | null = null
   for (let i = 0; i < doc.countPages(); i += 1) {
     const page = doc.loadPage(i)
     const hasTrimBox = !page.getObject().get('TrimBox').isNull()
@@ -40,8 +92,10 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
     // и от неё же отсчитывает остальные коробки.
     const bounds = page.getBounds()
     const height = bounds[3]
+    const trim = rectFrom(page.getBounds(hasTrimBox ? 'TrimBox' : 'CropBox'), height)
+    if (i === 0) cropMarks = cropMarksOf(page, height, trim)
     pages.push({
-      trim: rectFrom(page.getBounds(hasTrimBox ? 'TrimBox' : 'CropBox'), height),
+      trim,
       media: rectFrom(page.getBounds('MediaBox'), height),
       hasTrimBox,
       // За краем приведённой полосы содержимого нет: форма писателя его отсекает,
@@ -59,6 +113,7 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
     pageCount: pages.length,
     pages,
     uniformSize: uniform && first !== undefined ? size(first.trim.w, first.trim.h) : null,
+    cropMarks,
   }
 }
 

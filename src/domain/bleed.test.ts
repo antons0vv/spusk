@@ -15,6 +15,7 @@ const doc = (pages: readonly SourcePage[]): DocumentInfo => ({
   pageCount: pages.length,
   pages,
   uniformSize: size(200, 300),
+  cropMarks: null,
 })
 
 describe('вылет из файла', () => {

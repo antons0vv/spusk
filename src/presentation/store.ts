@@ -90,12 +90,18 @@ export const createAppStore = (engine: EnginePort) => {
 
   const becomeReady = (file: File, opened: OpenedDocument, password: string | null) => {
     const thumbnails = new Thumbnails(engine, readyHandle, (failure) => recover(failure))
-    set({
+    set((state) => ({
       screen: { kind: 'ready', doc: { file, ...opened, password, thumbnails } },
       sheet: 0,
       back: false,
       exporting: { kind: 'idle' },
-    })
+      // Файл сам нарисовал метки реза — метки включаются и рисуются его числами. Файл без
+      // меток флажок не трогает: он остаётся, каким был, как и остальные параметры.
+      settings:
+        opened.info.cropMarks === null
+          ? state.settings
+          : { ...state.settings, marks: { ...state.settings.marks, crop: true } },
+    }))
   }
 
   /**

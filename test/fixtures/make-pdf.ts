@@ -29,6 +29,16 @@ export type Options = {
   readonly withoutContents?: readonly number[]
   /** Объявить полосам группу прозрачности. */
   readonly transparencyGroup?: boolean
+  /**
+   * Метки реза в поле за TrimBox, как их рисует InDesign: у каждого угла два штриха на
+   * продолжении линий реза, под каждым белая подложка. Поле задаёт `bleed`.
+   */
+  readonly cropMarks?: {
+    readonly offset: number
+    readonly length: number
+    readonly pen: number
+    readonly halo?: number
+  }
 }
 
 const encoder = new TextEncoder()
@@ -57,6 +67,51 @@ const cornersOf = (
     ? `BT /F1 6 Tf 1 0 0 1 ${origin + 1} ${origin + 1} Tm (outside-${label}) Tj ET`
     : '',
 ]
+
+/** Штрихи меток реза вокруг полосы; штрих обрезается краем MediaBox, как у InDesign. */
+const cropMarksOf = (
+  marks: NonNullable<Options['cropMarks']>,
+  off: number,
+  w: number,
+  h: number,
+  origin: number,
+  mediaW: number,
+  mediaH: number,
+): readonly string[] => {
+  const segments: [number, number, number, number][] = []
+  for (const [x, out] of [
+    [off, -1],
+    [off + w, 1],
+  ] as const) {
+    for (const y of [off, off + h]) {
+      const start = x + out * marks.offset
+      const end = Math.min(
+        origin + mediaW,
+        Math.max(origin, x + out * (marks.offset + marks.length)),
+      )
+      segments.push([start, y, end, y])
+    }
+  }
+  for (const [y, out] of [
+    [off, -1],
+    [off + h, 1],
+  ] as const) {
+    for (const x of [off, off + w]) {
+      const start = y + out * marks.offset
+      const end = Math.min(
+        origin + mediaH,
+        Math.max(origin, y + out * (marks.offset + marks.length)),
+      )
+      segments.push([x, start, x, end])
+    }
+  }
+  const draw = (color: string, width: number) =>
+    segments.map(([x0, y0, x1, y1]) => `q ${color} RG ${width} w ${x0} ${y0} m ${x1} ${y1} l S Q`)
+  return [
+    ...(marks.halo === undefined ? [] : draw('1 1 1', marks.halo)),
+    ...draw('0 0 0', marks.pen),
+  ]
+}
 
 /** Собирает PDF вручную, без зависимостей: полосы пронумерованы P1, P2, ... */
 export const makeNumberedPdf = (options: Options): Uint8Array => {
@@ -110,7 +165,20 @@ export const makeNumberedPdf = (options: Options): Uint8Array => {
     const label = `P${i + 1}`
     const off = origin + bleed
     const body = bodyOf(label, options.width, options.height, off)
-    const corners = cornersOf(label, options.height, off, bleed, options.crop, origin)
+    const corners = [
+      ...cornersOf(label, options.height, off, bleed, options.crop, origin),
+      ...(options.cropMarks === undefined
+        ? []
+        : cropMarksOf(
+            options.cropMarks,
+            off,
+            options.width,
+            options.height,
+            origin,
+            mediaW,
+            mediaH,
+          )),
+    ]
     const texts = options.splitContents
       ? [body.join('\n'), corners.filter((s) => s !== '').join('\n')]
       : [[...body, ...corners].filter((s) => s !== '').join('\n')]

@@ -1,1 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>path{stroke:#000}@media (prefers-color-scheme:dark){path{stroke:#fff}}</style><path d="M1 10H7.5M10 1V7.5M24.5 10H31M22 1V7.5M1 22H7.5M10 24.5V31M24.5 22H31M22 24.5V31" fill="none" stroke-width="3.5" stroke-linecap="butt"/></svg>
+<svg width="99" height="99" viewBox="0 0 99 99" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="99" height="99" fill="white"/>
+<path d="M38.4236 49.5L10.7325 49.5" stroke="black" stroke-width="2"/>
+<path d="M49.5 10.7325L49.5 38.4236" stroke="black" stroke-width="2"/>
+</svg>

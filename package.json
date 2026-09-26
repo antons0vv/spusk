@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "e2e": "vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc --noEmit",
-    "check": "biome check src test"
+    "check": "biome check src test",
+    "deploy": "vite build && wrangler deploy"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
@@ -24,7 +25,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "wrangler": "^4.141.0"
   },
   "dependencies": {
     "comlink": "^4.4.2",

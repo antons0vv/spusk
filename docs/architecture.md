@@ -10,6 +10,8 @@
 - `bun run e2e` — сквозные проверки в браузере; нужен установленный Google Chrome
 - `bun run typecheck` — проверка типов
 - `bun run check` — линт и формат (Biome)
+- `bun run deploy` — сборка и выкладка на tools.volnenko.com: воркер Cloudflare раздаёт `dist/`
+  как статику, сервера нет. Настройки в `wrangler.jsonc`, кэш хэшированных файлов в `public/_headers`
 
 ## Архитектура
 

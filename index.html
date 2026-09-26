@@ -3,11 +3,52 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>spusk</title>
-    <link rel="icon" href="data:," />
+    <title>spusk — pdf imposition in the browser</title>
+    <meta
+      name="description"
+      content="free pdf imposition in the browser: booklets with creep, n-up, step and repeat, cut and stack, crop marks, bleed. files never leave your computer."
+    />
+    <meta name="author" content="Anton Volnenko" />
+    <link rel="canonical" href="https://tools.volnenko.com/" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="spusk" />
+    <meta property="og:url" content="https://tools.volnenko.com/" />
+    <meta property="og:title" content="spusk — pdf imposition in the browser" />
+    <meta
+      property="og:description"
+      content="booklets, n-up, step and repeat, cut and stack. files never leave your computer."
+    />
+    <meta property="og:image" content="https://tools.volnenko.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="spusk: imposition for print, right in the browser" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "spusk",
+        "url": "https://tools.volnenko.com/",
+        "description": "Free PDF imposition in the browser: saddle-stitch booklets with creep, n-up, step and repeat, cut and stack, crop marks and bleed. Files are processed locally and never uploaded.",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires a modern browser with WebAssembly",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+        "author": { "@type": "Person", "name": "Anton Volnenko", "url": "https://github.com/antons0vv" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>spusk: imposition for print, right in the browser. it needs javascript to run.</noscript>
     <script type="module" src="/src/composition-root.tsx"></script>
   </body>
 </html>

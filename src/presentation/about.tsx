@@ -26,7 +26,7 @@ const AUTHOR: readonly Line[] = [
 const CREDITS: readonly Line[] = [
   one('license', 'AGPL-3.0-or-later', 'https://www.gnu.org/licenses/agpl-3.0.html'),
   one('engine', 'MuPDF by Artifex Software', 'https://mupdf.com'),
-  one('typeface', 'Alice by Cyreal, SIL Open Font License', 'https://github.com/cyrealtype/Alice'),
+  one('typeface', 'Alice by Cyreal', 'https://github.com/cyrealtype/Alice'),
 ]
 
 const Lines = ({ lines }: { lines: readonly Line[] }) => (

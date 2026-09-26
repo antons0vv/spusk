@@ -25,9 +25,9 @@ const concat = (parts: readonly Uint8Array[]): Uint8Array => {
 }
 
 /**
- * Представление буфера указывает прямо в кучу движка и обесценивается при
- * следующей же аллокации, а сам буфер иначе никто не освободит. Поэтому
- * копируем немедленно.
+ * The buffer's view points straight into the engine's heap and is invalidated by the
+ * very next allocation, and otherwise nobody would free the buffer itself. So copy
+ * immediately.
  */
 const copyOf = (buffer: mupdf.Buffer): Uint8Array => {
   const copy = new Uint8Array(buffer.asUint8Array())
@@ -39,8 +39,8 @@ const contentsOf = (pageObject: mupdf.PDFObject): Uint8Array => {
   const contents = pageObject.get('Contents')
   if (contents.isStream()) return copyOf(contents.readStream())
   if (!contents.isArray()) {
-    // Полоса без потока содержимого — обычное дело: обороты титулов, разделители,
-    // вставки из текстовых редакторов. Это пустая полоса, а не повод отменить экспорт.
+    // A page without a content stream is common: backs of title pages, dividers, inserts
+    // from word processors. It is a blank page, not a reason to cancel the export.
     return new Uint8Array(0)
   }
   const parts: Uint8Array[] = []
@@ -61,7 +61,7 @@ const composeRaw = (a: mupdf.Matrix, b: mupdf.Matrix): mupdf.Matrix => [
 
 type FormGeometry = { readonly bbox: mupdf.Rect; readonly matrix: mupdf.Matrix }
 
-/** Лист по умолчанию: его подставляет движок, когда коробки полосы пусты. */
+/** The default sheet: the engine substitutes it when the page boxes are empty. */
 const LETTER: mupdf.Rect = [0, 0, 612, 792]
 
 const boxRect = (box: mupdf.PDFObject): mupdf.Rect | null => {
@@ -77,10 +77,10 @@ const boxRect = (box: mupdf.PDFObject): mupdf.Rect | null => {
 const isEmptyBox = (box: mupdf.Rect): boolean => box[2] <= box[0] || box[3] <= box[1]
 
 /**
- * Та же коробка, по которой строит трансформ полосы сам движок: CropBox,
- * пересечённый с MediaBox. Читатель отдаёт домену координаты, отсчитанные от неё,
- * поэтому от неё же обязан отсчитывать и писатель. Если CropBox не объявлен, он по
- * стандарту равен MediaBox; при пустом пересечении движок подставляет Letter.
+ * The same box the engine itself builds the page transform from: the CropBox
+ * intersected with the MediaBox. The reader gives the domain coordinates measured from
+ * it, so the writer must measure from it too. If no CropBox is declared, the standard
+ * makes it equal to the MediaBox; if the intersection is empty, the engine substitutes Letter.
  */
 const pageBox = (object: mupdf.PDFObject): mupdf.Rect => {
   const media = boxRect(object.getInheritable('MediaBox')) ?? LETTER
@@ -96,12 +96,12 @@ const pageBox = (object: mupdf.PDFObject): mupdf.Rect => {
 }
 
 /**
- * Приводит форму к той системе координат, в которой думает домен.
- * Адаптер чтения отдаёт размеры полосы уже приведёнными: начало в нуле, поворот
- * применён. Содержимое же лежит в сыром пространстве полосы. Рамка формы
- * задаётся в сыром пространстве, а матрица формы переводит её в приведённое.
- * Рамка заодно отсекает содержимое, спрятанное кропбоксом: на готовый лист оно
- * попасть не должно.
+ * Brings the form into the coordinate system the domain thinks in.
+ * The read adapter returns page sizes already normalized: origin at zero, rotation
+ * applied. The content, though, lives in the raw page space. The form BBox is given
+ * in raw space, and the form Matrix carries it into normalized space.
+ * The BBox also clips content hidden by the CropBox: it must not reach the
+ * finished sheet.
  */
 const formGeometry = (page: mupdf.PDFPage): FormGeometry => {
   const bounds = pageBox(page.getObject())
@@ -119,20 +119,20 @@ const formGeometry = (page: mupdf.PDFPage): FormGeometry => {
 const describe = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause)
 
-/** Исполняет план: переносит исходные полосы формами XObject на новые листы. */
+/** Executes the plan: carries the source pages onto new sheets as form XObjects. */
 export class MupdfWriter implements ImposedWriterPort {
   constructor(private readonly reader: MupdfReader) {}
 
   write(handle: DocumentHandle, plan: Plan, onProgress?: Progress): Result<Uint8Array, WriteError> {
     const source = this.reader.document(handle)
     if (source === undefined) {
-      return err({ kind: 'Failed', message: 'документ закрыт или открыт другим читателем' })
+      return err({ kind: 'Failed', message: 'document is closed or was opened by another reader' })
     }
 
     const target = new mupdf.PDFDocument()
     try {
-      // Карта переноса одна на весь экспорт: иначе общие шрифты и изображения
-      // продублируются на каждом листе и файл распухнет в разы.
+      // One graft map for the whole export: otherwise shared fonts and images are
+      // duplicated on every sheet and the file grows several times over.
       const graft = target.newGraftMap()
       const forms = new Map<number, mupdf.PDFObject>()
 
@@ -152,9 +152,9 @@ export class MupdfWriter implements ImposedWriterPort {
         for (const value of geometry.matrix) matrix.push(value)
         dict.put('Matrix', matrix)
         dict.put('Resources', graft.graftObject(object.getInheritable('Resources')))
-        // Группа прозрачности переносится вместе с ресурсами: без неё блендинг и
-        // мягкие маски считаются относительно другого фона, и цвет уезжает молча —
-        // файл соберётся, дефект будет виден только на оттиске.
+        // The transparency group is carried over along with the resources: without it
+        // blending and soft masks are computed against a different backdrop, and color
+        // shifts silently — the file builds, the defect shows only in print.
         const group = object.get('Group')
         if (!group.isNull()) dict.put('Group', graft.graftObject(group))
         const form = target.addStream(contentsOf(object), dict)
@@ -179,22 +179,22 @@ export class MupdfWriter implements ImposedWriterPort {
         onProgress?.(target.countPages(), plan.sheets.length)
       }
 
-      // Коробки листа: обрезной и полезный формат совпадают с форматом листа,
-      // иначе RIP и просмотрщики берут их из умолчаний по-разному.
+      // Sheet boxes: the trim size and the usable area match the sheet size,
+      // otherwise RIPs and viewers take them from defaults, each in its own way.
       for (let i = 0; i < target.countPages(); i += 1) {
         const sheetPage = target.loadPage(i)
         sheetPage.setPageBox('CropBox', mediabox)
         sheetPage.setPageBox('TrimBox', mediabox)
       }
 
-      // garbage=4 объединяет и выкидывает недостижимые и повторяющиеся объекты:
-      // без него общий словарь ресурсов и формы всё равно плодятся по объекту на лист.
+      // garbage=4 merges and drops unreachable and duplicate objects: without it the
+      // shared resource dictionary and the forms still multiply, one object per sheet.
       return ok(copyOf(target.saveToBuffer('compress,garbage=4')))
     } catch (cause) {
       return err({ kind: 'Failed', message: describe(cause) })
     } finally {
-      // Освобождать надо и на отказе: иначе документ-цель вместе со всеми
-      // перенесёнными ресурсами повиснет до недетерминированной уборки.
+      // Free it on failure too: otherwise the target document, together with all the
+      // grafted resources, lingers until nondeterministic cleanup.
       target.destroy()
     }
   }

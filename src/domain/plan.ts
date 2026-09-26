@@ -18,9 +18,9 @@ export type PlanWarning =
   | { readonly kind: 'NoTrimBox'; readonly pages: number }
 
 /**
- * Что именно не так с параметрами. Интерфейс сопоставляет этому полю действие
- * восстановления и подсветку нужной группы контролов; строка идёт в отчёт и в тесты,
- * но решение принимается по метке, а не по прозе.
+ * What exactly is wrong with the parameters. The UI maps this field to a recovery
+ * action and to highlighting the relevant group of controls; the string goes into the
+ * report and the tests, but decisions are made on the label, not on the prose.
  */
 export type BadParameter = 'grid' | 'copies' | 'folio' | 'sheet' | 'margins' | 'document' | 'pages'
 
@@ -56,11 +56,11 @@ const orderFor = (scheme: Scheme, pageCount: number): readonly Side[] => {
 }
 
 /**
- * Допуск на сравнение размеров: сотая доля пункта, это тридцать пять микрон.
- * Меньше брать нельзя: координаты в PDF хранятся с одинарной точностью, и полоса
- * высотой 595.28 читается движком обратно как 595.280029, то есть на три
- * стотысячных больше. При машинном эпсилоне такая полоса не влезала бы на лист
- * ровно своего размера.
+ * Tolerance for size comparisons: a hundredth of a point, which is thirty-five microns.
+ * It cannot be smaller: PDF stores coordinates in single precision, and a page
+ * 595.28 tall is read back by the engine as 595.280029, that is, three
+ * hundred-thousandths larger. With machine epsilon such a page would not fit on a
+ * sheet of exactly its own size.
  */
 const SLACK = 0.01
 
@@ -77,51 +77,51 @@ const bad = (what: BadParameter, message: string): PlanError => ({
 const validate = (job: Job, doc: DocumentInfo): PlanError | null => {
   const { rows, cols } = gridShapeFor(job.scheme)
   if (!isCount(rows) || !isCount(cols)) {
-    return bad('grid', 'число строк и колонок должно быть целым и не меньше одного')
+    return bad('grid', 'the number of rows and columns must be a whole number, at least one')
   }
   if (job.scheme.kind === 'stepRepeat' && !isCount(job.scheme.copies)) {
-    return bad('copies', 'число копий должно быть целым и не меньше одной')
+    return bad('copies', 'the number of copies must be a whole number, at least one')
   }
   if (
     job.scheme.kind === 'booklet' &&
     job.scheme.folio !== 'all' &&
     (!Number.isInteger(job.scheme.folio) || job.scheme.folio < 4 || job.scheme.folio % 4 !== 0)
   ) {
-    return bad('folio', 'тетрадь должна быть кратна четырём и не меньше четырёх')
+    return bad('folio', 'a signature must be a multiple of four and at least four')
   }
   if (doc.pageCount < 1) {
-    return bad('document', 'в документе нет полос')
+    return bad('document', 'the document has no pages')
   }
   if (doc.pages.length !== doc.pageCount) {
     return bad(
       'document',
-      'описание документа противоречиво: число полос не совпадает с числом описаний',
+      'inconsistent document description: page count does not match the number of descriptions',
     )
   }
-  // Нулевая или нечисловая ширина полосы даёт бесконечность в масштабе и нечисло
-  // дальше по матрице, а в потоке содержимого нечисло молча становится нулём:
-  // полоса схлопнулась бы в точку, и отказа никто бы не увидел.
+  // A zero or non-numeric page width gives infinity in the scale and NaN further down
+  // the matrix, and in the content stream NaN silently becomes zero: the page would
+  // collapse to a point, and nobody would see a failure.
   if (!doc.pages.every((p) => isPositive(p.trim.w) && isPositive(p.trim.h))) {
-    return bad('pages', 'обрезной формат полосы должен быть конечным и положительным')
+    return bad('pages', 'the page trim size must be finite and positive')
   }
   if (!isPositive(job.sheet.size.w) || !isPositive(job.sheet.size.h)) {
-    return bad('sheet', 'размер листа должен быть положительным')
+    return bad('sheet', 'the sheet size must be positive')
   }
   if (job.sheet.margin < 0 || job.sheet.gap < 0 || job.source.bleed < 0) {
-    return bad('margins', 'поля, зазоры и вылеты не могут быть отрицательными')
+    return bad('margins', 'margins, gaps and bleed cannot be negative')
   }
   const usableW = job.sheet.size.w - 2 * job.sheet.margin - (cols - 1) * job.sheet.gap
   const usableH = job.sheet.size.h - 2 * job.sheet.margin - (rows - 1) * job.sheet.gap
   if (usableW <= 0 || usableH <= 0) {
-    return bad('margins', 'поля и зазоры не оставляют места под полосы')
+    return bad('margins', 'margins and gaps leave no room for pages')
   }
   return null
 }
 
 /**
- * Приводит полосы к общему обрезному формату, если включено выравнивание.
- * Каждая полоса центрируется внутри самого большого формата, поэтому
- * разноразмерный документ раскладывается без разъезда.
+ * Brings pages to a common trim size when size normalization is on.
+ * Each page is centered inside the largest size, so a
+ * mixed-size document is laid out without drifting.
  */
 const geometryOf = (pages: readonly SourcePage[], normalize: boolean): readonly PageGeometry[] => {
   const plain = pages.map((p) => ({ trim: p.trim, media: p.media }))
@@ -134,7 +134,7 @@ const geometryOf = (pages: readonly SourcePage[], normalize: boolean): readonly 
   }))
 }
 
-/** При переплёте справа развороты зеркалятся: первая полоса оказывается справа. */
+/** With right binding, spreads are mirrored: the first page ends up on the right. */
 const mirrorIfRightBound = (sides: readonly Side[], scheme: Scheme): readonly Side[] => {
   if (scheme.kind !== 'booklet' || scheme.binding !== 'right') return sides
   return sides.map((side) => ({ ...side, slots: [...side.slots].reverse() }))
@@ -153,7 +153,7 @@ const warningsFor = (job: Job, doc: DocumentInfo, padding: number): readonly Pla
   return warnings
 }
 
-/** Считает полный план спуска. Чистая функция: одинаковый вход даёт одинаковый выход. */
+/** Computes the full imposition plan. Pure function: the same input gives the same output. */
 export const plan = (job: Job, doc: DocumentInfo): Result<Plan, PlanError> => {
   const invalid = validate(job, doc)
   if (invalid !== null) return err(invalid)
@@ -164,7 +164,7 @@ export const plan = (job: Job, doc: DocumentInfo): Result<Plan, PlanError> => {
   const first = grid.cells[0]
   const reference = geometry[0]
   if (first === undefined || reference === undefined) {
-    return err(bad('grid', 'сетка не дала ни одной ячейки'))
+    return err(bad('grid', 'the grid produced no cells'))
   }
 
   if (job.source.scaling === 'actual') {

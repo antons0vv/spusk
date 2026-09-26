@@ -1,18 +1,18 @@
 import { compose, type Matrix, type Point, type Rect, type Size } from '../../domain/geometry.js'
 import { pt } from '../../domain/units.js'
 
-/** Лист на холсте: сколько пикселей в пункте и где левый верхний угол листа. */
+/** The sheet on the canvas: how many pixels per point and where the sheet's top-left corner is. */
 export type View = { readonly scale: number; readonly x: number; readonly y: number }
 
 export type Box = { readonly w: number; readonly h: number }
 
-/** Вписывает лист в прямоугольник холста по центру. */
+/** Fits the sheet into the canvas rectangle, centered. */
 export const fitView = (sheet: Size, box: Box): View => {
   const scale = Math.max(0, Math.min(box.w / sheet.w, box.h / sheet.h))
   return { scale, x: (box.w - sheet.w * scale) / 2, y: (box.h - sheet.h * scale) / 2 }
 }
 
-/** Лист в пространстве PDF, ось Y вверх, на холст, где ось Y вниз. */
+/** The sheet in PDF space, Y axis up, onto the canvas, where the Y axis points down. */
 export const sheetToCanvas = (sheet: Size, view: View): Matrix => [
   view.scale,
   0,
@@ -25,9 +25,9 @@ export const sheetToCanvas = (sheet: Size, view: View): Matrix => [
 export type Raster = { readonly width: number; readonly height: number; readonly page: Size }
 
 /**
- * Пиксели растра полосы на холст. Растр идёт сверху вниз по приведённой полосе,
- * дальше та же матрица размещения, которую исполняет писатель: превью и файл
- * расходятся только в разрешении.
+ * Page raster pixels onto the canvas. The raster runs top-down over the normalized page,
+ * then comes the same placement matrix the writer executes: the preview and the file
+ * differ only in resolution.
  */
 export const rasterToCanvas = (
   raster: Raster,
@@ -59,10 +59,10 @@ export const rectToCanvas = (r: Rect, sheet: Size, view: View) => ({
 })
 
 /**
- * Прижимает края растра к целым пикселям устройства. Соседние полосы делят одну
- * линию реза; если она проходит посреди пикселя, оба края закрашивают его частично,
- * и между полосами светится шов. Сдвиг не больше полупикселя, для превью это
- * незаметно. Повёрнутую матрицу не трогает: у неё края не вдоль пикселей.
+ * Snaps the raster edges to whole device pixels. Neighboring pages share one trim line;
+ * if it runs through the middle of a pixel, both edges paint it partially and a seam
+ * shows through between the pages. The shift is at most half a pixel, invisible in a
+ * preview. Leaves a rotated matrix alone: its edges don't run along the pixels.
  */
 export const snapToPixels = (m: Matrix, width: number, height: number): Matrix => {
   if (m[1] !== 0 || m[2] !== 0) return m

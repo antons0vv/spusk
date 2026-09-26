@@ -10,12 +10,15 @@ export type ResolvedMark =
       readonly to: Point
       readonly pen: Pt
       readonly dash: readonly number[] | null
-      /** Белая линия под штрихом, толщиной больше пера: отбивает метку от фона вылета. */
+      /**
+       * White line under the stroke, wider than the stroke weight: separates the mark from the
+       * bleed background.
+       */
       readonly halo: Pt | null
     }
   | { readonly kind: 'registration'; readonly center: Point; readonly radius: Pt; readonly pen: Pt }
 
-/** Метка реза: отступ от линии реза, длина штриха, перо и белая подложка под штрихом. */
+/** Crop mark: offset from the trim line, stroke length, stroke weight and white underlay. */
 export type CropGeometry = {
   readonly offset: Pt
   readonly length: Pt
@@ -28,7 +31,7 @@ export type MarkSpec =
   | { readonly kind: 'fold'; readonly length: Pt; readonly pen: Pt }
   | { readonly kind: 'registration'; readonly radius: Pt; readonly pen: Pt }
 
-/** Метки приводки ставятся только в поле не уже этого: иначе круг ляжет на полосу. */
+/** Registration marks go only in a margin at least this wide: else the circle lands on the page. */
 export const MIN_MARGIN_FOR_REGISTRATION_MM = 8
 const MIN_MARGIN_FOR_REGISTRATION = mm(MIN_MARGIN_FOR_REGISTRATION_MM)
 const FOLD_DASH: readonly number[] = [3, 3]
@@ -43,7 +46,7 @@ const line = (
   halo: Pt | null = null,
 ) => ({ kind: 'line', from, to, pen, dash, halo }) as const
 
-/** Сотая пункта: с этой точностью совпадают линии реза соседних полос при нулевом зазоре. */
+/** A hundredth of a point: the precision to which adjacent trim lines coincide at zero gap. */
 const SAME_LINE = 0.01
 
 const distinct = (values: readonly number[]): readonly number[] =>
@@ -63,8 +66,8 @@ type Block = {
 }
 
 /**
- * Рамка всех ячеек листа, включая пустые: штрихи стоят на одних местах на всех листах
- * серии, а гильотина всё равно режет через весь лист.
+ * Frame of all the sheet's cells, empty ones included: strokes stand in the same places on every
+ * sheet of the run, and the guillotine cuts across the whole sheet anyway.
  */
 const blockOf = (sheet: Sheet): Block | null => {
   if (sheet.placements.length === 0) return null
@@ -78,17 +81,17 @@ const blockOf = (sheet: Sheet): Block | null => {
 }
 
 /**
- * Линии реза листа. В n-up и нарезке их дают только занятые ячейки: линия вокруг одной
- * пустоты резчику не нужна. В сфальцованной схеме внутренние границы сетки — сгиб, а не рез, поэтому
- * края полос, обращённые к корешку, линий не дают при любом зазоре.
+ * Trim lines of a sheet. In n-up and cutting schemes only occupied cells produce them: the
+ * cutter has no use for a line around nothing but empty space. In a folded scheme the inner grid
+ * boundaries are a fold, not a cut, so page edges facing the spine produce no lines at any gap.
  */
 const cutLinesOf = (sheet: Sheet, grid: Grid, folded: boolean) => {
   const xs: number[] = []
   const ys: number[] = []
   sheet.placements.forEach((placement, i) => {
     const cell = grid.cells[i]
-    // Пустая ячейка n-up — отход, резать вокруг неё нечего. Пустая полоса брошюры — страница
-    // тетради: после фальцовки её край обрезается вместе с остальными.
+    // An empty n-up cell is waste, there is nothing to cut around it. An empty booklet page is a
+    // page of the signature: after folding its edge is trimmed along with the rest.
     if (cell === undefined || (placement.source.kind !== 'page' && !folded)) return
     const cut = (outer: boolean) => !folded || outer
     const { x, y, w, h } = placement.trim
@@ -101,8 +104,8 @@ const cutLinesOf = (sheet: Sheet, grid: Grid, folded: boolean) => {
 }
 
 /**
- * Штрих от края блока наружу: начинается на отступе, тянется на длину и обрезается
- * краем листа. Если до края листа не хватает даже отступа, штриха нет.
+ * Stroke from the block edge outward: starts at the offset, runs for the length and is
+ * clipped by the sheet edge. If the sheet edge is closer than even the offset, there is no stroke.
  */
 const outward = (
   edge: number,
@@ -118,9 +121,9 @@ const outward = (
 }
 
 /**
- * Метки реза по линиям реза, а не вокруг полос: каждая линия отмечается штрихом в поле
- * листа с обоих концов, внутри блока полос меток нет. Так их ставят программы спуска,
- * разбор в docs/crop-marks-research.md.
+ * Crop marks along trim lines, not around pages: each line gets a stroke in the sheet margin
+ * at both ends, with no marks inside the page block. This is how imposition software places
+ * them; see the analysis in docs/crop-marks-research.md.
  */
 const cropMarksFor = (
   sheet: Sheet,
@@ -156,9 +159,9 @@ const cropMarksFor = (
 }
 
 /**
- * Линия сгиба идёт по границе соседних ячеек, а не по доле листа: доли совпадают
- * с ячейками только при двух колонках, при трёх и больше метка уехала бы от реального
- * стыка. При ненулевом зазоре граница — середина зазора.
+ * The fold line runs along the boundary between adjacent cells, not along a fraction of the
+ * sheet: fractions coincide with cells only with two columns, with three or more the mark would
+ * drift off the real seam. With a non-zero gap the boundary is the middle of the gap.
  */
 const foldMarksFor = (grid: Grid, sheetSize: Size, margin: Pt, length: Pt, pen: Pt) => {
   const marks: ResolvedMark[] = []
@@ -183,7 +186,7 @@ const foldMarksFor = (grid: Grid, sheetSize: Size, margin: Pt, length: Pt, pen: 
 }
 
 const registrationMarksFor = (sheetSize: Size, margin: Pt, radius: Pt, pen: Pt) => {
-  // Метка сидит по центру поля, поэтому радиус больше половины поля вывел бы её на полосу.
+  // The mark sits mid-margin, so a radius over half the margin would push it onto the page.
   if (margin < MIN_MARGIN_FOR_REGISTRATION || radius > margin / 2) return []
   const inset = margin / 2
   return [
@@ -195,9 +198,9 @@ const registrationMarksFor = (sheetSize: Size, margin: Pt, radius: Pt, pen: Pt) 
 }
 
 /**
- * Разворачивает спецификацию меток в геометрию для конкретного листа. `folded` —
- * лист фальцуют (брошюра и тетради): только там есть сгиб, который метят пунктиром
- * и который не режут.
+ * Expands the mark spec into geometry for a specific sheet. `folded` means the
+ * sheet gets folded (booklet and signatures): only then is there a fold, which is
+ * marked with a dashed line and not cut.
  */
 export const resolveMarks = (
   sheet: Sheet,
@@ -210,7 +213,8 @@ export const resolveMarks = (
   specs.flatMap((spec) => {
     if (spec.kind === 'crop') return cropMarksFor(sheet, sheetSize, grid, spec, folded)
     if (spec.kind === 'fold') {
-      // Границы ячеек в n-up и нарезке режут, а не фальцуют: пунктир там сбил бы резчика.
+      // In n-up and cutting schemes cell boundaries are cut, not folded: a dashed line there
+      // would mislead the cutter.
       return folded ? foldMarksFor(grid, sheetSize, margin, spec.length, spec.pen) : []
     }
     return registrationMarksFor(sheetSize, margin, spec.radius, spec.pen)

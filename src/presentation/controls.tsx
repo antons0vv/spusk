@@ -1,19 +1,19 @@
 import { type ReactNode, useState } from 'react'
 
 /**
- * Щелчок мышью не забирает фокус: иначе пробел, которым листают оборот, нажимал бы
- * последнюю тронутую кнопку. С клавиатуры фокус на кнопки попадает как обычно.
+ * A mouse click doesn't take focus: otherwise the space bar, which flips to the back, would
+ * press the last button touched. From the keyboard, focus reaches buttons as usual.
  */
 const keepFocus = (e: React.MouseEvent) => {
   e.preventDefault()
-  // Но недописанное число отпускаем, иначе стрелки продолжили бы крутить его, а не листы.
+  // But an unfinished number is let go, or the arrows would keep turning it instead of the sheets.
   if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
 }
 
 const option = (active: boolean) =>
   active ? 'text-ink' : 'text-mute hover:text-ink transition-colors duration-100'
 
-/** Текст, который ведёт себя как кнопка. */
+/** Text that behaves like a button. */
 export const Act = ({
   children,
   onClick,
@@ -36,7 +36,7 @@ export const Act = ({
   </button>
 )
 
-/** Одно из нескольких: выбранное чёрное, остальные серые. */
+/** One of several: the selected one black, the rest gray. */
 export const Choice = <T extends string | number>({
   value,
   options,
@@ -62,7 +62,7 @@ export const Choice = <T extends string | number>({
   </span>
 )
 
-/** Любое подмножество: включённые чёрные. */
+/** Any subset: the enabled ones black. */
 export const Toggles = <K extends string>({
   value,
   options,
@@ -93,9 +93,9 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const shown = (value: number) => String(Math.round(value * 100) / 100)
 
 /**
- * Число, которое правится на месте. Запятая принимается наравне с точкой,
- * стрелки вверх и вниз шагают, с шифтом — вдесятеро. Недописанное значение
- * живёт в поле, в задание уходит только разобранное.
+ * A number edited in place. A comma is accepted on a par with a dot, the up and down
+ * arrows step, tenfold with shift. An unfinished value lives in the field; only a parsed
+ * one goes into the job.
  */
 export const Num = ({
   value,
@@ -114,18 +114,18 @@ export const Num = ({
   max?: number
   step?: number
   integer?: boolean
-  /** Значение посчитано, а не задано: серое, пока его не тронули. */
+  /** The value is computed, not set: gray until touched. */
   muted?: boolean
   /**
-   * Применять только по Enter, уходу из поля и стрелкам. Для величин, у которых
-   * промежуточные цифры бессмысленны: лист шириной «3» по дороге к «300» мигнул бы отказом.
+   * Apply only on Enter, on leaving the field and on arrows. For values whose intermediate
+   * digits make no sense: a sheet "3" wide on the way to "300" would flash a failure.
    */
   lazy?: boolean
   label: string
 }) => {
-  // Черновик живёт только пока поле в фокусе. Вне фокуса показывается само значение, без
-  // копии: копия, догоняющая значение эффектом, на кадр отстаёт и затирает выделение, и
-  // набранная цифра дописывается к старому числу вместо замены.
+  // The draft lives only while the field has focus. Out of focus the value itself is shown, with
+  // no copy: a copy that catches up with the value through an effect lags a frame behind and wipes
+  // the selection, and a typed digit gets appended to the old number instead of replacing it.
   const [draft, setDraft] = useState<string | null>(null)
   const text = draft ?? shown(value)
 
@@ -163,14 +163,14 @@ export const Num = ({
         commit(next)
         setDraft(shown(next))
       }}
-      // Ширина по числу знаков: field-sizing Safari пока не понимает и растягивает поле.
+      // Width by character count: Safari doesn't know field-sizing yet and stretches the field.
       style={{ width: `${Math.max(1, text.length) + 0.2}ch` }}
       className={muted ? 'text-mute hover:text-ink focus:text-ink' : 'text-ink'}
     />
   )
 }
 
-/** Строка параметра: подпись серым слева, значения справа. */
+/** A setting row: the label in gray on the left, the values on the right. */
 export const Row = ({ label, children }: { label?: string; children: ReactNode }) => (
   <>
     <span className="text-mute">{label ?? ''}</span>

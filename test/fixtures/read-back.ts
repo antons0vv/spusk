@@ -18,15 +18,15 @@ const isStextPage = (value: unknown): value is StextPage =>
   typeof value === 'object' && value !== null && 'blocks' in value
 
 /**
- * Структурный текст без масштаба округляет координаты до целых пунктов, а проверки
- * выползания измеряют сдвиги в доли пункта. Просим координаты в сотых долях
- * и делим обратно, чтобы наружу выходили обычные пункты.
+ * Structured text without a scale rounds coordinates to whole points, while the creep
+ * checks measure shifts in fractions of a point. We ask for coordinates in hundredths
+ * and divide back, so that plain points come out.
  */
 const STEXT_SCALE = 100
 
 /**
- * Читает готовый PDF и отдаёт по каждому листу его размер и текстовые метки с координатами.
- * Координаты структурного текста считаются от верхнего левого угла.
+ * Reads a finished PDF and returns, for each sheet, its size and text labels with coordinates.
+ * Structured-text coordinates are measured from the top-left corner.
  */
 export const readBack = (bytes: Uint8Array): readonly ReadSheet[] => {
   const doc = mupdf.PDFDocument.openDocument(bytes, 'application/pdf')
@@ -56,9 +56,9 @@ export const readBack = (bytes: Uint8Array): readonly ReadSheet[] => {
 }
 
 /**
- * Определяет, в какой ячейке сетки лежит метка. Строка ноль — верх листа.
- * Сравнение строгое, а не по вхождению: имена меток — префиксы друг друга,
- * «bottom-P1» входит в «bottom-P16», а в брошюре эти полосы лежат на одном листе.
+ * Finds which grid cell a label lies in. Row zero is the top of the sheet.
+ * The comparison is exact, not a substring match: label names are prefixes of each other,
+ * "bottom-P1" is contained in "bottom-P16", and in a booklet these pages sit on one sheet.
  */
 export const cellOf = (
   sheet: ReadSheet,

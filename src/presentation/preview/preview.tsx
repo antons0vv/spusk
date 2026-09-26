@@ -18,8 +18,8 @@ const HAIR = '#dcdcdc'
 const WASH = '#f3f3f3'
 
 /**
- * Под навигацию под листом: отбивка и строка. Интерлиньяж берётся из вёрстки, а не
- * числом: кегль задан в одном месте, в styles.css.
+ * Room for the navigation under the sheet: spacing and one line. The line height comes from
+ * the layout, not a number: the type size is set in one place, in styles.css.
  */
 const footerHeight = (): number =>
   2 * (Number.parseFloat(getComputedStyle(document.body).lineHeight) || 0)
@@ -40,8 +40,8 @@ const useBox = (ref: React.RefObject<HTMLElement | null>): Box => {
 }
 
 /**
- * Клип к целым пикселям экрана. Соседние полосы делят одну линию реза, и без
- * округления сглаживание обоих клипов оставляет между ними светлый шов.
+ * Clip to whole screen pixels. Neighboring pages share one trim line, and without
+ * rounding the antialiasing of both clips leaves a light seam between them.
  */
 const snappedClip = (r: Rect, size: Size, view: View, dpr: number) => {
   const c = rectToCanvas(r, size, view)
@@ -59,7 +59,7 @@ const drawMarks = (
   dpr: number,
 ) => {
   ctx.strokeStyle = '#000'
-  // Перо метки в масштабе превью тоньше пикселя: рисуем волосяной линией экрана.
+  // At preview scale the mark's stroke weight is thinner than a pixel: draw a screen hairline.
   ctx.lineWidth = 1 / dpr
   for (const mark of sheet.marks) {
     ctx.beginPath()
@@ -85,10 +85,10 @@ const drawMarks = (
 }
 
 /**
- * Один лист плана целиком. Полосы рисуются из миниатюр через ту же матрицу
- * размещения и тот же клип по вылету, что у писателя; движок при перерисовке не
- * трогается, пока нужная миниатюра уже есть. Лист прижат к верху колонки,
- * навигация идёт сразу под ним.
+ * One whole sheet of the plan. Pages are drawn from thumbnails through the same placement
+ * matrix and the same bleed clip as the writer's; a redraw doesn't touch the engine as long
+ * as the needed thumbnail is already there. The sheet is pinned to the top of the column,
+ * the navigation comes right under it.
  */
 export const Preview = ({
   sheet,
@@ -114,7 +114,7 @@ export const Preview = ({
 
   useEffect(() => thumbnails.subscribe(() => setLoaded((n) => n + 1)), [thumbnails])
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: loaded и handle перерисовывают лист, когда пришла миниатюра или переоткрылся документ
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loaded and handle redraw the sheet when a thumbnail arrives or the document is reopened
   useLayoutEffect(() => {
     const element = canvas.current
     const ctx = element?.getContext('2d')

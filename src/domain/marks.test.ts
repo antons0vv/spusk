@@ -21,11 +21,11 @@ const sheetWith = (margin = mm(10)) => {
     pt(0),
   )
   const sheet = sheets[0]
-  if (sheet === undefined) throw new Error('нет листа')
+  if (sheet === undefined) throw new Error('no sheet')
   return { sheet, grid, margin }
 }
 
-/** Лист под три полосы в ряд: доли листа и границы ячеек здесь расходятся. */
+/** A sheet for three pages in a row: here sheet fractions and cell boundaries diverge. */
 const threeUp = (margin: Pt, gap: Pt) => {
   const sheetSize = size(700, 320)
   const grid = buildGrid(sheetSize, 1, 3, margin, gap)
@@ -39,7 +39,7 @@ const threeUp = (margin: Pt, gap: Pt) => {
     gap,
   )
   const sheet = sheets[0]
-  if (sheet === undefined) throw new Error('нет листа')
+  if (sheet === undefined) throw new Error('no sheet')
   return { sheet, grid, sheetSize, margin }
 }
 
@@ -50,8 +50,8 @@ const cropOf = (sheet: Sheet, grid: Grid, margin: Pt, folded: boolean, sheetSize
   resolveMarks(sheet, sheetSize, grid, [CROP], margin, folded)
 
 /**
- * Разворот, где полосы стоят вплотную: лист ровно под две полосы с полями, масштаб
- * натуральный. При вписывании полосы центрируются в ячейках и между ними остаётся щель.
+ * A spread where the pages butt up: a sheet exactly for two pages plus margins, actual size.
+ * With fit scaling the pages are centered in their cells and a slit remains between them.
  */
 const spread = (margin = mm(10)) => {
   const sheetSize = size(2 * A5.trim.w + 2 * margin, A5.trim.h + 2 * margin)
@@ -66,7 +66,7 @@ const spread = (margin = mm(10)) => {
     pt(0),
   )
   const sheet = sheets[0]
-  if (sheet === undefined) throw new Error('нет листа')
+  if (sheet === undefined) throw new Error('no sheet')
   return { sheet, grid, margin, sheetSize }
 }
 
@@ -80,7 +80,7 @@ const blockOf = (sheet: Sheet) => ({
 const distinctRounded = (values: readonly number[]) =>
   [...new Set(values.map((v) => Math.round(v * 100) / 100))].sort((a, b) => a - b)
 
-/** Координаты вертикальных линий реза, по которым стоят штрихи. */
+/** Coordinates of the vertical trim lines the strokes sit on. */
 const verticalXs = (marks: readonly ResolvedMark[]) =>
   distinctRounded(
     marks.flatMap((m) => (m.kind === 'line' && m.from.x === m.to.x ? [m.from.x] : [])),
@@ -96,17 +96,17 @@ const foldLinesX = (marks: readonly ResolvedMark[]): readonly number[] =>
     (a, b) => a - b,
   )
 
-describe('метки', () => {
-  it('метки реза стоят по линиям реза, общая линия соседних полос даёт одну метку', () => {
+describe('marks', () => {
+  it('crop marks sit on trim lines, a line shared by adjacent pages gives one mark', () => {
     const { sheet, grid, margin, sheetSize } = spread()
     const marks = cropOf(sheet, grid, margin, false, sheetSize)
-    // Три вертикальные линии (общая посередине одна) и две горизонтальные, по штриху с концов.
+    // Three vertical lines (one shared in the middle) and two horizontal, a stroke at each end.
     expect(verticalXs(marks)).toHaveLength(3)
     expect(horizontalYs(marks)).toHaveLength(2)
     expect(marks).toHaveLength(10)
   })
 
-  it('белая подложка метки реза переходит в каждый её штрих, у метки сгиба подложки нет', () => {
+  it('the white underlay of a crop mark carries to each stroke, the fold mark has none', () => {
     const { sheet, grid, margin } = spread()
     const marks = resolveMarks(
       sheet,
@@ -125,10 +125,10 @@ describe('метки', () => {
     expect(fold.map((m) => m.halo)).toEqual(fold.map(() => null))
   })
 
-  it('внутри блока полос меток реза нет', () => {
+  it('there are no crop marks inside the page block', () => {
     const { sheet, grid, margin, sheetSize } = spread()
     const block = blockOf(sheet)
-    // Штрих, лежащий на линии реза соседней полосы, тоже внутри: он напечатается на её краю.
+    // A stroke on the adjacent page's trim line is inside too: it would print on that page's edge.
     const e = 0.01
     const within = (p: { x: number; y: number }) =>
       p.x > block.left + e && p.x < block.right - e && p.y > block.bottom - e && p.y < block.top + e
@@ -138,7 +138,7 @@ describe('метки', () => {
     expect(inside).toBe(false)
   })
 
-  it('штрих начинается на отступе от края блока и уходит наружу на свою длину', () => {
+  it('a stroke starts at the offset from the block edge and runs outward for its length', () => {
     const { sheet, grid, margin, sheetSize } = spread()
     const block = blockOf(sheet)
     const above = cropOf(sheet, grid, margin, false, sheetSize).filter(
@@ -152,7 +152,7 @@ describe('метки', () => {
     }
   })
 
-  it('на корешке сфальцованного разворота метки реза нет', () => {
+  it('there is no crop mark at the spine of a folded spread', () => {
     const { sheet, grid, margin, sheetSize } = spread()
     const marks = cropOf(sheet, grid, margin, true, sheetSize)
     const xs = verticalXs(marks)
@@ -161,13 +161,13 @@ describe('метки', () => {
     expect(marks).toHaveLength(8)
   })
 
-  it('при зазоре у каждой полосы своя линия реза', () => {
+  it('with a gap each page has its own trim line', () => {
     const { sheet, grid, sheetSize, margin } = threeUp(mm(10), mm(6))
     const marks = resolveMarks(sheet, sheetSize, grid, [CROP], margin, false)
     expect(verticalXs(marks)).toHaveLength(6)
   })
 
-  it('линия, которая ограничивает только пустую ячейку, меток не получает', () => {
+  it('a line that bounds only an empty cell gets no marks', () => {
     const margin = mm(10)
     const grid = buildGrid(A4L, 1, 2, margin, pt(0))
     const sheets = assemble(
@@ -180,15 +180,15 @@ describe('метки', () => {
       pt(0),
     )
     const sheet = sheets[0]
-    if (sheet === undefined) throw new Error('нет листа')
+    if (sheet === undefined) throw new Error('no sheet')
     const marks = cropOf(sheet, grid, margin, false)
-    // Левый и общий края занятой полосы есть, правого края пустой ячейки нет.
+    // The occupied page's left and shared edges are there, the empty cell's right edge is not.
     expect(verticalXs(marks)).toHaveLength(2)
-    // Горизонтальные линии занятой полосы доходят до края всего блока, пустая ячейка не в счёт.
+    // The occupied page's horizontals reach the whole block's edge; the empty cell does not count.
     expect(horizontalYs(marks)).toHaveLength(2)
   })
 
-  it('узкое поле обрезает штрихи по краю листа, а за край не выпускает', () => {
+  it('a narrow margin clips strokes at the sheet edge and does not let them past it', () => {
     const { sheet, grid, sheetSize } = spread(mm(5))
     const marks = cropOf(sheet, grid, mm(5), false, sheetSize)
     for (const m of marks) {
@@ -203,18 +203,18 @@ describe('метки', () => {
     expect(marks.length).toBeGreaterThan(0)
   })
 
-  it('поле не больше отступа не оставляет места ни одному штриху', () => {
+  it('a margin no wider than the offset leaves no room for any stroke', () => {
     const { sheet, grid, sheetSize } = spread(mm(2))
     expect(cropOf(sheet, grid, mm(2), false, sheetSize)).toHaveLength(0)
   })
 
-  it('в схеме без сгиба метки фальцовки не ставятся даже по просьбе', () => {
+  it('a scheme without a fold gets no fold marks, even when asked', () => {
     const { sheet, grid, margin } = sheetWith()
     const marks = resolveMarks(sheet, A4L, grid, [FOLD], margin, false)
     expect(marks).toHaveLength(0)
   })
 
-  it('метка фальцовки рисуется пунктиром на сгибе разворота', () => {
+  it('a fold mark is drawn dashed on the fold of the spread', () => {
     const { sheet, grid, margin } = sheetWith()
     const marks = resolveMarks(
       sheet,
@@ -231,7 +231,7 @@ describe('метки', () => {
     }
   })
 
-  it('при трёх колонках метки фальцовки идут по границам ячеек, а не по долям листа', () => {
+  it('with three columns fold marks follow cell boundaries, not sheet fractions', () => {
     const { sheet, grid, sheetSize, margin } = threeUp(mm(10), pt(0))
     const marks = resolveMarks(
       sheet,
@@ -241,14 +241,14 @@ describe('метки', () => {
       margin,
       true,
     )
-    // Доли листа дали бы 233.33 и 466.67 — мимо стыка полос почти на десять пунктов.
+    // Sheet fractions would give 233.33 and 466.67, missing the page seam by almost ten points.
     const xs = foldLinesX(marks)
     expect(xs).toHaveLength(2)
     expect(xs[0]).toBeCloseTo(242.7822, 3)
     expect(xs[1]).toBeCloseTo(457.2178, 3)
   })
 
-  it('при зазоре метка фальцовки идёт по его середине', () => {
+  it('with a gap the fold mark runs down its middle', () => {
     const { sheet, grid, sheetSize, margin } = threeUp(mm(10), mm(6))
     const marks = resolveMarks(
       sheet,
@@ -263,7 +263,7 @@ describe('метки', () => {
     expect(xs[1]).toBeCloseTo(460.0525, 3)
   })
 
-  it('вокруг пустого слота метки реза не рисуются', () => {
+  it('no crop marks are drawn around an empty slot', () => {
     const margin = mm(10)
     const grid = buildGrid(A4L, 1, 2, margin, pt(0))
     const sheets = assemble(
@@ -276,7 +276,7 @@ describe('метки', () => {
       pt(0),
     )
     const sheet = sheets[0]
-    if (sheet === undefined) throw new Error('нет листа')
+    if (sheet === undefined) throw new Error('no sheet')
     const marks = resolveMarks(
       sheet,
       A4L,
@@ -285,11 +285,11 @@ describe('метки', () => {
       margin,
       false,
     )
-    // Восемь линий на единственную занятую ячейку, вокруг пустой — ничего.
+    // Eight lines for the only occupied cell, nothing around the empty one.
     expect(marks.filter((m) => m.kind === 'line')).toHaveLength(8)
   })
 
-  it('метки приводки не ставятся при узком поле', () => {
+  it('registration marks are not placed with a narrow margin', () => {
     const { sheet, grid } = sheetWith(mm(4))
     const marks = resolveMarks(
       sheet,
@@ -302,7 +302,7 @@ describe('метки', () => {
     expect(marks.filter((m) => m.kind === 'registration')).toHaveLength(0)
   })
 
-  it('метки приводки не ставятся, если радиус не помещается в поле', () => {
+  it('registration marks are not placed if the radius does not fit in the margin', () => {
     const { sheet, grid, margin } = sheetWith(mm(12))
     const marks = resolveMarks(
       sheet,
@@ -315,7 +315,7 @@ describe('метки', () => {
     expect(marks.filter((m) => m.kind === 'registration')).toHaveLength(0)
   })
 
-  it('поле ровно на пороге даёт метки приводки', () => {
+  it('a margin exactly at the threshold gets registration marks', () => {
     const { sheet, grid, margin } = sheetWith(mm(8))
     const marks = resolveMarks(
       sheet,
@@ -328,7 +328,7 @@ describe('метки', () => {
     expect(marks.filter((m) => m.kind === 'registration')).toHaveLength(4)
   })
 
-  it('метки приводки ставятся по четырём сторонам при достаточном поле', () => {
+  it('registration marks go on all four sides given enough margin', () => {
     const { sheet, grid, margin } = sheetWith(mm(12))
     const marks = resolveMarks(
       sheet,
@@ -341,7 +341,7 @@ describe('метки', () => {
     expect(marks.filter((m) => m.kind === 'registration')).toHaveLength(4)
   })
 
-  it('пустая полоса брошюры режется как настоящая: после фальцовки это страница тетради', () => {
+  it('an empty booklet page is cut like a real one: after folding it is a signature page', () => {
     const margin = mm(10)
     const sheetSize = size(2 * A5.trim.w + 2 * margin, A5.trim.h + 2 * margin)
     const grid = buildGrid(sheetSize, 1, 2, margin, pt(0))
@@ -356,9 +356,9 @@ describe('метки', () => {
       true,
     )
     const sheet = sheets[0]
-    if (sheet === undefined) throw new Error('нет листа')
+    if (sheet === undefined) throw new Error('no sheet')
     const xs = verticalXs(resolveMarks(sheet, sheetSize, grid, [CROP], margin, true))
-    // Оба внешних края разворота: и у пустой полосы, и у занятой.
+    // Both outer edges of the spread: on the empty page and on the occupied one.
     expect(xs).toHaveLength(2)
     expect(xs[0]).toBeCloseTo(margin, 2)
   })

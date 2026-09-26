@@ -1,12 +1,12 @@
-/** Отступ меток от края окна. */
+/** Offset of the marks from the window edge. */
 const EDGE = 10
-/** Длина плеча метки. */
+/** Length of a mark arm. */
 const ARM = 16
-/** Зазор между концом метки и линией реза, как у настоящих меток. */
+/** Gap between the end of a mark and the trim line, as on real marks. */
 const OFFSET = 8
-/** Линия реза окна: от неё же отсчитывается всё содержимое экрана. */
+/** The window's trim line: all screen content is measured from it as well. */
 export const TRIM = EDGE + ARM + OFFSET
-/** Толщина всех линий интерфейса; та же величина в styles.css. */
+/** Thickness of every line in the interface; the same value is in styles.css. */
 export const PEN = 1.5
 
 const corners = [
@@ -16,7 +16,7 @@ const corners = [
   { x: 'right', y: 'bottom' },
 ] as const
 
-/** Окно — это лист: в углах метки реза, как на оттиске. */
+/** The window is a sheet: crop marks in the corners, as on a printed sheet. */
 export const CropMarks = () => (
   <div aria-hidden className="pointer-events-none fixed inset-0">
     {corners.map(({ x, y }) => (
@@ -35,8 +35,8 @@ export const CropMarks = () => (
 )
 
 /**
- * Метка реза внутри окна: граница колонок отмечается штрихами в верхнем и нижнем поле,
- * как линия реза между двумя полосами на листе.
+ * Crop mark inside the window: the boundary between the columns is marked with strokes in the top
+ * and bottom margins, like the trim line between two pages on a sheet.
  */
 export const CutMarks = ({ x }: { x: number }) => (
   <div aria-hidden className="pointer-events-none fixed inset-0">

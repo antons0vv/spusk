@@ -13,25 +13,26 @@ const describe = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause)
 
 /**
- * Рисует приведённую полосу — ту же коробку, от которой читатель отсчитывает
- * размеры, с поворотом. Аннотации не рисуются: в готовый спуск они не попадают,
- * и превью обязано показывать то, что будет в файле.
+ * Renders the normalized page — the same box the reader measures sizes from, with
+ * rotation. Annotations are not rendered: they do not reach the finished imposition,
+ * and the preview must show what will be in the file.
  */
 export class MupdfRenderer implements PageRendererPort {
   constructor(private readonly reader: MupdfReader) {}
 
   render(handle: DocumentHandle, pageIndex: number, maxPx: number): Result<PageImage, RenderError> {
     const doc = this.reader.document(handle)
-    if (doc === undefined) return err({ kind: 'Failed', message: 'документ закрыт' })
+    if (doc === undefined) return err({ kind: 'Failed', message: 'document is closed' })
     try {
       const page = doc.loadPage(pageIndex)
       const [x0, y0, x1, y1] = page.getBounds()
       const w = x1 - x0
       const h = y1 - y0
       const scale = maxPx / Math.max(w, h)
-      // Размеры растра округляются до целых пикселей, масштабы по осям подгоняются под них.
-      // Иначе крайний столбец покрыт полосой частично, выходит светлее и в превью читается
-      // как шов между соседними полосами. Искажение пропорций меньше полупикселя.
+      // Raster dimensions are rounded to whole pixels, and the per-axis scales are fitted to
+      // them. Otherwise the edge column is only partly covered by the page, comes out lighter
+      // and reads in the preview as a seam between adjacent pages. The aspect distortion is
+      // under half a pixel.
       const width = Math.max(1, Math.round(w * scale))
       const height = Math.max(1, Math.round(h * scale))
       const sx = width / w
@@ -44,12 +45,12 @@ export class MupdfRenderer implements PageRendererPort {
       )
       if (pixmap.getWidth() !== width || pixmap.getHeight() !== height) {
         pixmap.destroy()
-        return err({ kind: 'Failed', message: 'движок отдал растр не того размера' })
+        return err({ kind: 'Failed', message: 'engine returned a raster of the wrong size' })
       }
       const n = pixmap.getNumberOfComponents()
       const stride = pixmap.getStride()
-      // Представление смотрит в кучу движка: переписываем в свой буфер до любой
-      // следующей аллокации, заодно добавляя непрозрачную альфу.
+      // The view points into the engine's heap: copy into our own buffer before any
+      // further allocation, adding opaque alpha along the way.
       const source = pixmap.getPixels()
       const pixels = new Uint8ClampedArray(width * height * 4)
       for (let row = 0; row < height; row += 1) {

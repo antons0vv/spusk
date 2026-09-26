@@ -1,6 +1,6 @@
 import { BLANK, page, type Side } from '../slots.js'
 
-/** Раскладка под резку стопой: число стопок равно числу ячеек. */
+/** Layout for cutting as a stack: the number of stacks equals the number of cells. */
 export const cutStackOrder = (pageCount: number, rows: number, cols: number): readonly Side[] => {
   const stacks = rows * cols
   const perStack = Math.ceil(pageCount / stacks)

@@ -1,11 +1,11 @@
 declare const unit: unique symbol
 
-/** Длина в типографских пунктах. Внутренняя единица всего проекта. */
+/** Length in typographic points. The internal unit of the whole project. */
 export type Pt = number & { readonly [unit]: 'Pt' }
 
 const PT_PER_MM = 72 / 25.4
 
-// Единственное место в проекте, где допускается приведение типа: конструктор бренда.
+// The only place in the project where a type cast is allowed: the brand constructor.
 export const pt = (value: number): Pt => value as Pt
 
 export const mm = (value: number): Pt => pt(value * PT_PER_MM)

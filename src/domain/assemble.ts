@@ -49,8 +49,8 @@ const bleedForEdge = (atSheetEdge: boolean, margin: Pt, gap: Pt, wanted: number)
 type Room = { readonly w: number; readonly h: number }
 
 /**
- * Место под одну полосу: самая большая полоса документа в её масштабе. Считается по всему
- * документу, а не по листу, иначе у стопки листов разъехались бы линии реза.
+ * Slot for one page: the largest page of the document at its scale. Computed over the whole
+ * document, not per sheet, otherwise the trim lines of a stack of sheets would drift apart.
  */
 const slotSizeOf = (pages: readonly PageGeometry[], source: SourceSpec, cell: Cell): Room =>
   pages.reduce(
@@ -62,9 +62,9 @@ const slotSizeOf = (pages: readonly PageGeometry[], source: SourceSpec, cell: Ce
   )
 
 /**
- * Прямоугольник места под ячейку. Полосы стоят общим блоком с заданным зазором, и блок
- * центрируется на листе: иначе запас ячеек расходился бы щелями между полосами, разворот
- * брошюры не смыкался бы на корешке, а под каждый рез нужна была бы своя линия.
+ * Slot rectangle for a cell. Pages sit as one block with the given gap, and the block is
+ * centered on the sheet: otherwise the spare room in the cells would open up as slits between
+ * pages, a booklet spread would not close at the spine, and every cut would need its own line.
  */
 const slotRectFor = (cell: Cell, grid: Grid, slot: Room, gap: Pt): Rect => {
   const first = grid.cells[0]
@@ -96,9 +96,9 @@ const placeOne = (
   const scale = scaleFor(source, geom, cell)
   const placedW = geom.trim.w * scale
   const placedH = geom.trim.h * scale
-  // Полоса меньше места (документ разного формата) встаёт по центру своего места. В
-  // сфальцованной схеме она прижимается к корешку: иначе после фальцовки не дойдёт до
-  // переплёта. Поперёк корешка остаётся по центру.
+  // A page smaller than its slot (a mixed-size document) sits in the center of its slot. In a
+  // folded scheme it is pushed against the spine: otherwise after folding it would not reach
+  // the binding. Across the spine it stays centered.
   const spareX = place.w - placedW
   const spareY = place.h - placedH
   const alongX = !folded || grid.cols === 1 ? spareX / 2 : cell.col === 0 ? spareX : 0
@@ -122,7 +122,7 @@ const placeOne = (
   return { source: slot, matrix, trim, clip }
 }
 
-/** Превращает порядок полос и сетку в физические размещения на листах. */
+/** Turns the page order and the grid into physical placements on sheets. */
 export const assemble = (
   sides: readonly Side[],
   grid: Grid,

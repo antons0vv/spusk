@@ -13,7 +13,7 @@ export type LoadedDocument = {
   readonly file: File
   readonly handle: DocumentHandle
   readonly info: DocumentInfo
-  /** Хранится, чтобы переоткрыть документ после отмены или падения потока без вопросов. */
+  /** Kept to reopen the document after a cancel or a worker crash without asking again. */
   readonly password: string | null
   readonly thumbnails: Thumbnails
 }
@@ -39,7 +39,7 @@ export type Exporting =
 export type AppState = {
   readonly screen: Screen
   readonly settings: Settings
-  /** Физический лист, начиная с нуля. */
+  /** Physical sheet, zero-based. */
   readonly sheet: number
   readonly back: boolean
   readonly exporting: Exporting
@@ -54,7 +54,7 @@ const download = (bytes: Uint8Array<ArrayBuffer>, name: string) => {
   link.href = url
   link.download = name
   link.click()
-  // Сразу отзывать нельзя: Safari начинает загрузку уже после возврата из click.
+  // Can't revoke right away: Safari starts the download only after click returns.
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
@@ -68,7 +68,7 @@ export const createAppStore = (engine: EnginePort) => {
   }))
   const { getState: get, setState: set } = store
 
-  /** Номер последнего открытия: ответ движка на устаревший файл выбрасывается. */
+  /** Number of the latest open: an engine reply for a stale file is thrown away. */
   let opening = 0
   let exportToken = 0
   let recovering: Promise<void> | null = null
@@ -95,8 +95,8 @@ export const createAppStore = (engine: EnginePort) => {
       sheet: 0,
       back: false,
       exporting: { kind: 'idle' },
-      // Файл сам нарисовал метки реза — метки включаются и рисуются его числами. Файл без
-      // меток флажок не трогает: он остаётся, каким был, как и остальные параметры.
+      // The file drew crop marks itself: marks turn on and are drawn with its numbers. A file
+      // without marks leaves the checkbox alone: it stays as it was, like the other settings.
       settings:
         opened.info.cropMarks === null
           ? state.settings
@@ -105,8 +105,8 @@ export const createAppStore = (engine: EnginePort) => {
   }
 
   /**
-   * Поток пересоздан: документ открывается заново из того же файла, миниатюры
-   * остаются, они от того же файла. Второй вызов, пока идёт первый, ждёт его.
+   * The worker was recreated: the document is reopened from the same file; the thumbnails
+   * stay, they come from the same file. A second call while the first is running waits for it.
    */
   const recover = (failure: EngineFailure): Promise<void> => {
     if (recovering !== null) return recovering
@@ -215,7 +215,7 @@ export const createAppStore = (engine: EnginePort) => {
       if (result.ok) {
         set({ exporting: { kind: 'idle' } })
         const { buffer, byteOffset, byteLength } = result.value
-        // Через границу потока буфер пришёл передачей владения, копировать его незачем.
+        // The buffer crossed the worker boundary by ownership transfer, no need to copy it.
         const bytes =
           buffer instanceof ArrayBuffer
             ? new Uint8Array(buffer, byteOffset, byteLength)

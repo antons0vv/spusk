@@ -14,17 +14,17 @@ type Entry = Thumbnail & { readonly px: number; used: number }
 
 const BUCKETS = [256, 512, 1024, 2048] as const
 
-/** Растры рисуются ступенями: иначе каждый пиксель ресайза окна перерисовывал бы книгу. */
+/** Rasters come in steps: otherwise every pixel of a window resize would re-render the book. */
 export const bucketFor = (px: number): number =>
   BUCKETS.find((b) => b >= px) ?? BUCKETS[BUCKETS.length - 1] ?? 2048
 
-/** Около 200 МБ растров, дальше выбрасываются давно не показанные. */
+/** About 200 MB of rasters; beyond that, the ones not shown for the longest are thrown out. */
 const PIXEL_BUDGET = 50_000_000
 
 /**
- * Кэш миниатюр одного документа. Превью на каждой отрисовке говорит, какие полосы
- * ему нужны сейчас, и кэш тянет из движка по одной, только из этого списка:
- * быстрое листание не копит очередь в потоке.
+ * Thumbnail cache for one document. On every render the preview says which pages it
+ * needs right now, and the cache pulls them from the engine one at a time, only from that
+ * list: fast flipping doesn't pile up a queue in the worker.
  */
 export class Thumbnails {
   private readonly entries = new Map<number, Entry>()

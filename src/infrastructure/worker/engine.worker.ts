@@ -15,7 +15,7 @@ const api = {
   close: (handle: DocumentHandle) => reader.close(handle),
   render: (handle: DocumentHandle, pageIndex: number, maxPx: number) => {
     const result = renderer.render(handle, pageIndex, maxPx)
-    // Растр отдаётся передачей владения, без копии: страниц в превью много.
+    // The raster moves by ownership transfer, without a copy: the preview has many pages.
     return result.ok ? Comlink.transfer(result, [result.value.pixels.buffer]) : result
   },
   write: (handle: DocumentHandle, plan: Plan, onProgress: Progress) => {
@@ -27,6 +27,6 @@ const api = {
 export type EngineApi = typeof api
 
 Comlink.expose(api)
-// Движок поднимается верхнеуровневым await, и сообщения, пришедшие раньше, могут
-// потеряться. Клиент ждёт этого сигнала и только потом начинает звать.
+// The engine starts up through a top-level await, and messages that arrive earlier can be
+// lost. The client waits for this signal and only then starts calling.
 self.postMessage('ready')

@@ -4,7 +4,7 @@ import { type Pt, pt } from './units.js'
 
 export type Binding = 'left' | 'right' | 'top'
 
-/** Сдвиг для стороны листа: внешний лист тетради не сдвигается, каждый следующий на шаг больше. */
+/** Shift for a side: the outer sheet of a signature stays put, each next one moves a step more. */
 export const creepShift = (folioSideIndex: number, perSheet: Pt): Pt =>
   pt(Math.floor(folioSideIndex / 2) * perSheet)
 
@@ -25,22 +25,23 @@ const directionFor = (placement: Placement, binding: Binding, sheetSize: Size): 
 }
 
 /**
- * Клип полосы не заходит за линию сгиба. Сдвиг к корешку уводит содержимое за сгиб, и без
- * этой границы полоса напечаталась бы на соседней: после фальцовки полоска чужого
- * содержимого оказалась бы по другую сторону корешка.
+ * A page's clip does not cross the fold line. The shift towards the spine pushes content past
+ * the fold, and without this bound the page would print onto its neighbor: after folding, a
+ * strip of someone else's content would end up on the other side of the spine.
  */
 const clipAtFold = (clip: Rect, sx: number, sy: number, sheetSize: Size): Rect => {
   const foldX = sheetSize.w / 2
   const foldY = sheetSize.h / 2
   const x0 = sx < 0 ? Math.max(clip.x, foldX) : clip.x
   const x1 = sx > 0 ? Math.min(clip.x + clip.w, foldX) : clip.x + clip.w
-  // Ось Y вверх: верхняя полоса едет вниз и не опускается ниже сгиба, нижняя наоборот.
+  // Y points up: the top page moves down and does not drop below the fold, the bottom one
+  // the other way round.
   const y0 = sy < 0 ? Math.max(clip.y, foldY) : clip.y
   const y1 = sy > 0 ? Math.min(clip.y + clip.h, foldY) : clip.y + clip.h
   return rect(x0, y0, Math.max(0, x1 - x0), Math.max(0, y1 - y0))
 }
 
-/** Сдвигает содержимое каждой полосы листа к корешку на заданную величину. */
+/** Shifts the content of every page on the sheet towards the spine by the given amount. */
 export const applyCreep = (sheet: Sheet, shift: Pt, binding: Binding, sheetSize: Size): Sheet => ({
   ...sheet,
   placements: sheet.placements.map((placement) => {

@@ -135,7 +135,7 @@ const warningText = (w: PlanWarning): string => {
 }
 
 const Problem = ({ error, update }: { error: PlanError; update: Update }) => {
-  // Не влезающие полосы вписываются сами, сюда этот отказ доходит только на битой геометрии.
+  // Oversized pages are scaled to fit on their own; this failure only gets here on broken geometry.
   if (error.kind === 'DoesNotFit') return <span>pages don’t fit on the sheet</span>
   if (error.what === 'margins') {
     return (
@@ -173,7 +173,7 @@ export const WorkScreen = ({
   show: (sheet: number, back: boolean) => void
   onExport: () => void
   onCancel: () => void
-  /** Боковая колонка показывает «о проекте» вместо параметров. */
+  /** The sidebar shows "about" instead of the settings. */
   about: boolean
   onAbout: (open: boolean) => void
   dragging: boolean
@@ -187,8 +187,8 @@ export const WorkScreen = ({
   const sheetCount = built.ok ? Math.ceil(built.value.sheets.length / sides) : 0
   const current = Math.min(state.sheet, Math.max(0, sheetCount - 1))
   const back = sides === 2 && state.back
-  // Стрелки идут по всем сторонам подряд: лицо, оборот, следующий лист. Иначе без пробела
-  // видна только половина полос брошюры. Пробел переворачивает текущий лист.
+  // The arrows walk through all sides in a row: front, back, next sheet. Otherwise, without the
+  // space bar, only half of a booklet's pages is visible. Space turns the current sheet over.
   const sideCount = built.ok ? built.value.sheets.length : 0
   const sideIndex = Math.min(current * sides + (back ? 1 : 0), Math.max(0, sideCount - 1))
   const goToSide = (index: number) => {
@@ -204,7 +204,7 @@ export const WorkScreen = ({
         return
       }
       if (e.target instanceof HTMLInputElement) return
-      // Пробел на кнопке, куда пришли с клавиатуры, нажимает её, а не листает.
+      // Space on a button reached from the keyboard presses it instead of flipping.
       if (e.key === ' ' && e.target instanceof HTMLButtonElement) return
       if (e.key === 'ArrowRight') goToSide(sideIndex + 1)
       else if (e.key === 'ArrowLeft') goToSide(sideIndex - 1)
@@ -224,7 +224,7 @@ export const WorkScreen = ({
   const fileMarks = doc.info.cropMarks
   const marginTooSmall =
     s.marginMm !== 'auto' && s.marginMm < neededMarginMm(s, resolved.bleedMm, fileMarks)
-  // Пустой блок предупреждений не должен добавлять отбивку перед экспортом.
+  // An empty warnings block must not add spacing before export.
   const hasNotes =
     marginTooSmall || (built.ok && (built.value.warnings.length > 0 || resolved.scale < 1))
 
@@ -261,7 +261,7 @@ export const WorkScreen = ({
               ['custom', 'custom'],
             ]}
             onChange={(format) =>
-              // Свой формат начинается с того листа, что сейчас на экране.
+              // A custom format starts from the sheet currently on screen.
               format === 'custom'
                 ? update({ format, customWMm: sheetWMm, customHMm: sheetHMm })
                 : update({ format })
@@ -364,7 +364,7 @@ export const WorkScreen = ({
         <Row label="marks">
           <Toggles
             value={s.marks}
-            // Сгиб есть только у брошюры: в остальных схемах границы ячеек режут.
+            // Only a booklet has a fold: in the other schemes the cell boundaries are cut.
             options={[
               ['crop', 'crop'],
               ...(s.scheme === 'booklet' ? [['fold', 'fold'] as const] : []),
@@ -412,7 +412,7 @@ export const WorkScreen = ({
           )}
         </div>
       )}
-      {/* Экспорт — последний шаг после параметров и предупреждений о них. */}
+      {/* Export is the last step, after the settings and the warnings about them. */}
       <div className="mt-[1lh] flex flex-wrap gap-x-[1.2em] whitespace-pre">
         {exporting.kind === 'running' ? (
           <>

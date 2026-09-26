@@ -1,10 +1,10 @@
 import type { Placement } from '../../domain/assemble.js'
 import type { ResolvedMark } from '../../domain/marks.js'
 
-/** Предел координат в PDF. За ним `toFixed` срывается в экспоненту и файл ломается. */
+/** PDF coordinate limit. Beyond it `toFixed` falls into exponent notation and the file breaks. */
 const MAX_COORDINATE = 14400
 
-/** Числа в содержимом PDF пишутся без экспоненты и без хвостовых нулей. */
+/** Numbers in PDF content are written without an exponent and without trailing zeros. */
 export const formatNumber = (value: number, digits = 4): string => {
   if (!Number.isFinite(value)) return '0'
   const clamped = Math.min(Math.max(value, -MAX_COORDINATE), MAX_COORDINATE)
@@ -16,10 +16,10 @@ export const formatNumber = (value: number, digits = 4): string => {
 
 const n = (value: number): string => formatNumber(value)
 
-/** Множители матрицы пишем точнее координат: их ошибка растягивается на всю полосу. */
+/** Matrix factors get more digits than coordinates: their error stretches over the whole page. */
 const m = (value: number): string => formatNumber(value, 6)
 
-/** Операторы для одного размещения: клип по вылету, затем форма XObject. */
+/** Operators for one placement: a clip to the bleed, then the form XObject. */
 export const placementOps = (name: string, placement: Placement): string => {
   const { clip, matrix } = placement
   return [
@@ -31,7 +31,7 @@ export const placementOps = (name: string, placement: Placement): string => {
   ].join('\n')
 }
 
-/** Коэффициент аппроксимации четверти окружности кривой Безье. */
+/** Coefficient for approximating a quarter circle with a Bézier curve. */
 const KAPPA = 0.5522847498
 
 const circleOps = (cx: number, cy: number, r: number): string => {
@@ -46,8 +46,8 @@ const circleOps = (cx: number, cy: number, r: number): string => {
 }
 
 /**
- * Операторы отрисовки меток. Штрихи чистые чёрные. Белые подложки идут раньше всех штрихов:
- * так подложка одной метки не ляжет поверх другой.
+ * Operators that draw the marks. Strokes are pure black. White underlays come before all strokes,
+ * so the underlay of one mark never lands on top of another.
  */
 export const markOps = (marks: readonly ResolvedMark[]): string => {
   if (marks.length === 0) return ''

@@ -1,60 +1,60 @@
 # spusk
 
-Браузерный инструмент спуска полос. Всё считается на клиенте: файл не уходит на сервер,
-телеметрии и аналитики поверх пользовательских данных нет.
+A browser-based imposition tool. Everything is computed on the client: the file never goes to a
+server, and there is no telemetry or analytics on top of user data.
 
-Работает на https://tools.volnenko.com.
+Live at https://tools.volnenko.com.
 
-## Зачем
+## Why
 
-На macOS нет бесплатного инструмента спуска с интерфейсом. Quite Imposing Plus стоит около
-тысячи долларов и требует Acrobat Pro сверху. Браузерные сервисы спотыкаются на файлах в
-десятки мегабайт. Консольные утилиты вроде `paperjam` и `pdfcpu` считают геометрию бесплатно
-и точно, но не показывают превью и оставляют выползание и cut-and-stack на ручной счёт.
+macOS has no free imposition tool with a user interface. Quite Imposing Plus costs about a
+thousand dollars and needs Acrobat Pro on top. Browser-based services choke on files of tens of
+megabytes. Command-line tools like `paperjam` and `pdfcpu` compute the geometry for free and
+accurately, but show no preview and leave creep and cut-and-stack to be worked out by hand.
 
-## Что уже готово
+## What's ready
 
-Ядро спуска и интерфейс к нему: бросить PDF в окно, выбрать схему, посмотреть листы,
-скачать готовый спуск.
+The imposition core and an interface for it: drop a PDF into the window, pick a scheme, look
+through the sheets, download the finished imposition.
 
-- Четыре схемы: брошюра на скрепку с тетрадями и выползанием, n-up, step and repeat,
+- Four schemes: saddle-stitch booklet with signatures and creep, n-up, step and repeat,
   cut and stack.
-- Поля, зазоры и вылеты. Эффективный вылет считается для каждой стороны полосы отдельно:
-  у соседней ячейки предел равен половине зазора, у края листа — полю листа.
-- Метки реза, фальцовки и приводки.
-- Масштаб «как есть» или «вписать в ячейку», выравнивание полос разного размера.
-- Чтение исходника с учётом CropBox, TrimBox и поворота полосы; запись листов переносом
-  полос формами XObject через общую карту переноса.
+- Margins, gaps and bleed. Effective bleed is computed for each edge of a page separately:
+  next to a neighboring cell the limit is half the gap, at the sheet edge it is the sheet margin.
+- Crop, fold and registration marks.
+- Scale “as is” or “fit to cell”, alignment of pages of different sizes.
+- Reading the source with CropBox, TrimBox and page rotation taken into account; writing sheets
+  by carrying pages over as form XObjects through a shared graft map.
 
-План раскладки — это данные: превью и запись получают одну и ту же структуру, поэтому
-экран и файл разойтись не могут. Отказы возвращаются значениями, а не исключениями.
+The layout plan is data: the preview and the writer receive the same structure, so the screen
+and the file cannot diverge. Failures are returned as values, not exceptions.
 
-## Устройство
+## Structure
 
-- `src/domain/` — раскладка. Не знает ни про PDF, ни про DOM, ни про воркеры.
-- `src/application/` — сценарии и порты.
-- `src/infrastructure/` — адаптеры движка PDF и фоновый поток, в котором он работает.
-- `src/presentation/` — интерфейс на React.
-- `test/fixtures/` — генератор тестовых PDF и обратный разбор готового спуска.
+- `src/domain/` — layout. Knows nothing about PDF, the DOM or workers.
+- `src/application/` — use cases and ports.
+- `src/infrastructure/` — PDF engine adapters and the worker the engine runs in.
+- `src/presentation/` — React interface.
+- `test/fixtures/` — test PDF generator and read-back of the finished imposition.
 
-Подробности решений — в `docs/design.md`.
+Details of the decisions are in `docs/design.md`.
 
-## Тесты
+## Tests
 
 ```
 bun install
-bun run dev         # интерфейс на localhost
-bun run test        # тесты
-bun run e2e         # сквозные проверки в Google Chrome
-bun run typecheck   # проверка типов
-bun run check       # линт и формат
-bun run deploy      # сборка и выкладка на tools.volnenko.com
+bun run dev         # interface on localhost
+bun run test        # tests
+bun run e2e         # end-to-end checks in Google Chrome
+bun run typecheck   # type check
+bun run check       # lint and format
+bun run deploy      # build and deploy to tools.volnenko.com
 ```
 
-Тесты не ходят в сеть: исходные PDF собираются кодом, результат читается обратно движком и
-проверяется по физическим координатам полос и меток.
+Tests don't touch the network: source PDFs are built in code, and the result is read back by the
+engine and checked against the physical coordinates of pages and marks.
 
-## Лицензия
+## License
 
-AGPL-3.0-or-later. Лицензия унаследована от движка mupdf и выбрана осознанно: закрыть
-исходники позже, не меняя движок, не получится.
+AGPL-3.0-or-later. The license is inherited from the mupdf engine and was chosen deliberately:
+closing the source later is not possible without replacing the engine.

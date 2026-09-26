@@ -38,15 +38,15 @@ export type Job = {
 
 export type SourcePage = PageGeometry & {
   readonly hasTrimBox: boolean
-  /** BleedBox в пространстве полосы, обрезанный её краем; null, если файл его не объявил. */
+  /** BleedBox in page space, clipped to the page edge; null if the file did not declare one. */
   readonly bleed: Rect | null
 }
 
 export type DocumentInfo = {
   readonly pageCount: number
   readonly pages: readonly SourcePage[]
-  /** null, если полосы разного размера. */
+  /** null if the pages differ in size. */
   readonly uniformSize: Size | null
-  /** Метки реза, которые файл нарисовал сам вокруг первой полосы; null, если их нет. */
+  /** Crop marks the file drew itself around the first page; null if there are none. */
   readonly cropMarks: CropGeometry | null
 }

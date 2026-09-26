@@ -4,8 +4,8 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // mupdf грузит wasm через import.meta.url и верхнеуровневый await: предсборка
-  // зависимостей переносит модуль и теряет путь к wasm, а старые цели не знают await.
+  // mupdf loads wasm via import.meta.url and a top-level await: dependency pre-bundling
+  // moves the module and loses the path to the wasm, and older targets don't know await.
   optimizeDeps: { exclude: ['mupdf'] },
   build: { target: 'esnext' },
   worker: { format: 'es' },

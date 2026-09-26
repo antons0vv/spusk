@@ -4,8 +4,8 @@ import { cutStackOrder } from './cut-stack.js'
 const readable = (sides: ReturnType<typeof cutStackOrder>): string[] =>
   sides.map((s) => s.slots.map((x) => (x.kind === 'page' ? String(x.index + 1) : '—')).join(' '))
 
-describe('порядок cut and stack', () => {
-  it('шестнадцать полос в четыре стопки', () => {
+describe('cut and stack order', () => {
+  it('sixteen pages in four stacks', () => {
     expect(readable(cutStackOrder(16, 2, 2))).toEqual([
       '1 5 9 13',
       '2 6 10 14',
@@ -14,7 +14,7 @@ describe('порядок cut and stack', () => {
     ])
   })
 
-  it('после резки каждая стопка идёт подряд', () => {
+  it('after cutting each stack runs in sequence', () => {
     const sides = cutStackOrder(16, 2, 2)
     for (let stack = 0; stack < 4; stack += 1) {
       const column = sides.map((s) => s.slots[stack])
@@ -23,7 +23,7 @@ describe('порядок cut and stack', () => {
     }
   })
 
-  it('неполный хвост даёт пустые ячейки в последней стопке', () => {
+  it('an incomplete tail leaves empty cells in the last stack', () => {
     expect(readable(cutStackOrder(6, 1, 2))).toEqual(['1 4', '2 5', '3 6'])
     expect(readable(cutStackOrder(5, 1, 2))).toEqual(['1 4', '2 5', '3 —'])
   })

@@ -1,6 +1,6 @@
 import { BLANK, page, type Side } from '../slots.js'
 
-/** Заполняет лист копиями одной полосы. Каждая исходная полоса получает свою серию листов. */
+/** Fills a sheet with copies of one page. Each source page gets its own run of sheets. */
 export const stepRepeatOrder = (
   pageCount: number,
   rows: number,

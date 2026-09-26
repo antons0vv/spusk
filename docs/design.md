@@ -1,67 +1,67 @@
-# Спуск полос в браузере: ядро (v1)
+# Imposition in the browser: core (v1)
 
-Дата: 2026-09-10
-Статус: согласовано, готово к плану реализации
+Date: 2026-09-10
+Status: agreed, ready for an implementation plan
 
-## 1. Концепция
+## 1. Concept
 
-Браузерный инструмент спуска полос, работающий полностью на клиенте. Файл не покидает
-машину пользователя: нет загрузки на сервер, нет телеметрии, нет аналитики поверх
-пользовательских данных. Хостинг статический, код открытый.
+A browser-based imposition tool that runs entirely on the client. The file never leaves the
+user's machine: no upload to a server, no telemetry, no analytics on top of user data.
+Static hosting, open source.
 
-Инструмент закрывает ядро спуска: четыре схемы раскладки плюс метки, вылеты и
-компенсацию выползания. Это подмножество Quite Imposing Plus, выбранное осознанно:
-собственно спуск против допечатной обвязки. Обвязка вынесена в следующие очереди
-(раздел 13).
+The tool covers the core of imposition: four layout schemes plus marks, bleeds and creep
+compensation. This is a subset of Quite Imposing Plus, chosen deliberately: imposition proper
+versus the prepress extras around it. The extras are deferred to later phases
+(section 13).
 
-### Почему это вообще делается
+### Why build this at all
 
-На macOS нет бесплатного инструмента спуска с интерфейсом. Quite Imposing Plus стоит
-949 USD и требует Acrobat Pro сверху. Существующие браузерные сервисы не выдерживают
-файлы в десятки мегабайт. Консольные утилиты (`paperjam`, `pdfcpu`) закрывают геометрию
-полностью и бесплатно, но не имеют превью и требуют ручного счёта для выползания и
+There is no free imposition tool with a user interface on macOS. Quite Imposing Plus costs
+949 USD and requires Acrobat Pro on top. Existing browser services cannot handle files of
+tens of megabytes. Command-line utilities (`paperjam`, `pdfcpu`) cover the geometry fully and
+for free, but have no preview and require manual calculation for creep and
 cut-and-stack.
 
-### Инварианты
+### Invariants
 
-1. **План это данные.** Раскладка вычисляется чистой функцией в виде структуры данных.
-   Превью и запись PDF потребляют один и тот же план. Расхождение экрана и файла
-   невозможно по конструкции.
-2. **Документ не покидает воркер.** В главный поток попадают только описание документа
-   и растровые миниатюры.
-3. **Домен не знает про PDF.** Слой `domain/` не импортирует ни движок, ни DOM.
-4. **Ошибка это значение.** Отказы возвращаются через `Result`, а не бросаются.
+1. **The plan is data.** The layout is computed by a pure function as a data structure.
+   The preview and the PDF writer consume the same plan. A mismatch between screen and file
+   is impossible by construction.
+2. **The document never leaves the worker.** Only the document description and raster
+   thumbnails reach the main thread.
+3. **The domain knows nothing about PDF.** The `domain/` layer imports neither the engine
+   nor the DOM.
+4. **An error is a value.** Failures are returned through `Result`, not thrown.
 
-## 2. Сценарии
+## 2. Use cases
 
-| Сценарий | Схема | Что получает пользователь |
+| Use case | Scheme | What the user gets |
 |---|---|---|
-| Зин или буклет на скрепку | `booklet`, folio = все полосы | Листы в порядке сшивки, сдвиг на выползание |
-| Книга под КБС или шитьё | `booklet`, folio = 8/16/32 | Отдельные тетради |
-| Визитки, наклейки, флаеры | `stepRepeat` | Сетка копий с вылетами и метками реза |
-| Нумерованные билеты, талоны | `cutStack` | Порядок под резку стопой |
-| Экономная печать документа | `nup` | Несколько полос на лист, порядок сохранён |
+| Zine or saddle-stitch booklet | `booklet`, folio = all pages | Sheets in stitching order, shifted for creep |
+| Perfect-bound or sewn book | `booklet`, folio = 8/16/32 | Separate signatures |
+| Business cards, stickers, flyers | `stepRepeat` | Grid of copies with bleeds and crop marks |
+| Numbered tickets, coupons | `cutStack` | Order for cutting as a stack |
+| Economical printing of a document | `nup` | Several pages per sheet, order preserved |
 
-## 3. Архитектура
+## 3. Architecture
 
 ```
 src/
-  domain/          единицы, геометрия, коробки страниц, схемы, планировщики,
-                   спецификация меток, доменные ошибки, Result.
-                   Зависимостей нет вообще.
-  application/     сценарии и порты. Оркестрация, никакой арифметики раскладки.
-  infrastructure/  адаптер mupdf в воркере, доступ к файлам, хранение пресетов.
-  presentation/    React, канвас превью, сайдбар параметров. Логики нет.
+  domain/          units, geometry, page boxes, schemes, planners,
+                   mark specification, domain errors, Result.
+                   No dependencies at all.
+  application/     use cases and ports. Orchestration, no layout arithmetic.
+  infrastructure/  mupdf adapter in the worker, file access, preset storage.
+  presentation/    React, preview canvas, parameter sidebar. No logic.
 ```
 
-Правило импортов: `domain` не импортирует ничего; `application` импортирует только
-`domain`; `infrastructure` импортирует `domain` и `application`; `presentation`
-импортирует `application` и `domain`, но никогда `infrastructure` напрямую.
-Сборка зависимостей происходит в единственном композиционном корне
-`src/composition-root.ts`. DI-контейнера нет: зависимостей четыре, контейнер был бы
-церемонией ради церемонии.
+Import rule: `domain` imports nothing; `application` imports only `domain`;
+`infrastructure` imports `domain` and `application`; `presentation` imports `application`
+and `domain`, but never `infrastructure` directly. Dependencies are wired in a single
+composition root, `src/composition-root.ts`. There is no DI container: there are four
+dependencies, and a container would be ceremony for ceremony's sake.
 
-### Порты
+### Ports
 
 ```ts
 interface DocumentReaderPort {
@@ -85,27 +85,27 @@ interface FileSinkPort {
 }
 ```
 
-Первые три реализованы одним адаптером над mupdf, живущим в Web Worker и доступным
-через Comlink. Типы движка (`any` в его `.d.ts`) наружу не протекают: адаптер
-возвращает только собственные типы проекта.
+The first three are implemented by one adapter over mupdf that lives in a Web Worker and is
+reached through Comlink. Engine types (`any` in its `.d.ts`) do not leak out: the adapter
+returns only the project's own types.
 
-### Поток данных
+### Data flow
 
 ```
 File
- └─> worker: mupdf.open ──> OpenedDocument { pages, sizes, boxes }   (главный поток)
+ └─> worker: mupdf.open ──> OpenedDocument { pages, sizes, boxes }   (main thread)
                               │
-     UI параметры ────────────┼──> domain.plan(job, doc) ──> Plan   (микросекунды)
+     UI parameters ───────────┼──> domain.plan(job, doc) ──> Plan   (microseconds)
                               │                               │
-     worker: thumbnails ──────┴───────────────────────────────┼──> канвас превью
+     worker: thumbnails ──────┴───────────────────────────────┼──> preview canvas
                                                               │
-     кнопка «Экспорт» ────────────────────────────────────────┴──> worker: writer ──> Blob
+     "export" button ─────────────────────────────────────────┴──> worker: writer ──> Blob
 ```
 
-Пересчёт плана не трогает движок. Кручение любого ползунка стоит одну перерисовку
-канваса.
+Recomputing the plan does not touch the engine. Dragging any slider costs one canvas
+redraw.
 
-## 4. Доменная модель
+## 4. Domain model
 
 ```ts
 type Pt = number & { readonly __brand: 'Pt' }
@@ -120,7 +120,7 @@ type PageBoxes = { media: Rect; crop: Rect; trim: Rect | null; bleed: Rect | nul
 type DocumentInfo = {
   pageCount: number
   pages: readonly { size: Size; boxes: PageBoxes }[]
-  uniformSize: Size | null      // null, если полосы разного размера
+  uniformSize: Size | null      // null if the pages differ in size
 }
 
 type Scheme =
@@ -128,7 +128,7 @@ type Scheme =
       creepPerSheet: Pt }
   | { kind: 'nup'; rows: number; cols: number; fill: 'rows' | 'cols' }
   | { kind: 'stepRepeat'; rows: number; cols: number; copies: number }
-  | { kind: 'cutStack'; rows: number; cols: number }   // число стопок = rows × cols
+  | { kind: 'cutStack'; rows: number; cols: number }   // number of stacks = rows × cols
 
 type SheetSpec = {
   size: Size
@@ -138,9 +138,9 @@ type SheetSpec = {
 }
 
 type SourceSpec = {
-  bleed: Pt                       // объявленный вылет исходника
-  scaling: 'actual' | 'fit'       // 100% или вписать в ячейку
-  normalizeSizes: boolean         // выровнять разные полосы по самой большой
+  bleed: Pt                       // declared bleed of the source
+  scaling: 'actual' | 'fit'       // 100% or fit into the cell
+  normalizeSizes: boolean         // normalize differing pages to the largest one
 }
 
 type MarkSpec =
@@ -152,315 +152,322 @@ type Job = { scheme: Scheme; sheet: SheetSpec; source: SourceSpec; marks: readon
 
 type Placement = {
   source: { kind: 'page'; index: PageIndex } | { kind: 'blank' }
-  matrix: Matrix        // как исходная полоса ложится на лист
-  trim: Rect            // линия реза на листе, от неё строятся метки
-  clip: Rect            // trim, расширенный на эффективный вылет
+  matrix: Matrix        // how the source page lands on the sheet
+  trim: Rect            // trim line on the sheet; marks are built from it
+  clip: Rect            // trim expanded by the effective bleed
 }
 
 type Sheet = {
   placements: readonly Placement[]
   side: 'front' | 'back' | 'single'
-  marks: readonly ResolvedMark[]   // уже в координатах этого листа
+  marks: readonly ResolvedMark[]   // already in this sheet's coordinates
 }
 
 type Plan = {
   sheetSize: Size
   sheets: readonly Sheet[]
-  padding: number                  // сколько пустых полос добавлено
+  padding: number                  // how many blank pages were added
   warnings: readonly PlanWarning[]
 }
 
 plan(job: Job, doc: DocumentInfo): Result<Plan, PlanError>
 ```
 
-Единица измерения внутри всегда пункт. Интерфейс по умолчанию показывает миллиметры,
-переключатель на пункты и дюймы конвертирует только на границе представления.
+The internal unit is always the point. By default the interface shows millimeters; the
+switch to points and inches converts only at the presentation boundary.
 
-## 5. Алгоритмы раскладки
+## 5. Layout algorithms
 
-Все индексы полос нулевые. `n` это число полос после добивки пустыми.
+All page indices are zero-based. `n` is the number of pages after padding with blanks.
 
-### 5.1 Брошюра на скрепку
+### 5.1 Saddle-stitch booklet
 
-`n` округляется вверх до кратного четырём, добавленные полосы пустые и уходят в конец
-документа. Для стороны листа `i` из диапазона `[0, n/2)`:
+`n` is rounded up to a multiple of four; the added pages are blank and go to the end of the
+document. For side `i` in the range `[0, n/2)`:
 
 ```
-i чётное  → (левая, правая) = (n − 1 − i, i)
-i нечётное → (левая, правая) = (i, n − 1 − i)
+i even → (left, right) = (n − 1 − i, i)
+i odd  → (left, right) = (i, n − 1 − i)
 ```
 
-Проверено на 16 полосах: `16|1`, `2|15`, `14|3`, `4|13`, `12|5`, `6|11`, `10|7`, `8|9`.
+Checked on 16 pages: `16|1`, `2|15`, `14|3`, `4|13`, `12|5`, `6|11`, `10|7`, `8|9`.
 
-### 5.2 Тетради
+### 5.2 Signatures
 
-При `folio = f` (кратно четырём) документ режется на куски по `f` полос, к каждому куску
-применяется правило 5.1 с локальными индексами, результат смещается на начало куска.
-Последний кусок добивается пустыми до `f`.
+With `folio = f` (a multiple of four) the document is cut into chunks of `f` pages; rule 5.1
+is applied to each chunk with local indices, and the result is offset to the start of the
+chunk. The last chunk is padded with blanks up to `f`.
 
-### 5.3 Выползание
+### 5.3 Creep
 
-Для стороны `i` внутри тетради номер листа `s = floor(i_local / 2)`, где `s = 0` это
-внешний лист. Сдвиг `d = creepPerSheet × s`. Левая полоса разворота сдвигается на `+d`
-по горизонтали, правая на `−d`, то есть обе к корешку. Внешний лист не сдвигается.
+For side `i` within a signature, the sheet number is `s = floor(i_local / 2)`, where `s = 0`
+is the outer sheet. The shift is `d = creepPerSheet × s`. The left page of the spread shifts
+by `+d` horizontally, the right one by `−d`, i.e. both toward the spine. The outer sheet does
+not shift.
 
-При `binding = 'right'` порядок разворотов зеркалится, направление сдвига остаётся к
-корешку. При `binding = 'top'` сдвиг вертикальный, верхняя полоса разворота идёт вниз,
-нижняя вверх.
+With `binding = 'right'` the order of spreads is mirrored; the shift still goes toward the
+spine. With `binding = 'top'` the shift is vertical: the top page of the spread moves down,
+the bottom one up.
 
-Сдвинутая полоса обрезается по линии сгиба: содержимое, ушедшее за корешок, иначе
-напечаталось бы на соседней полосе разворота.
+A shifted page is clipped at the fold line: content pushed past the spine would otherwise
+print on the neighboring page of the spread.
 
 ### 5.4 N-up
 
-`cells = rows × cols`. Полоса `k` попадает на лист `floor(k / cells)` в ячейку
-`c = k mod cells`. Ячейка разворачивается в сетку так:
+`cells = rows × cols`. Page `k` goes to sheet `floor(k / cells)`, into cell
+`c = k mod cells`. The cell maps onto the grid like this:
 
 ```
 fill = 'rows' → row = floor(c / cols), col = c mod cols
 fill = 'cols' → col = floor(c / rows), row = c mod rows
 ```
 
-Строка ноль это верх листа.
+Row zero is the top of the sheet.
 
 ### 5.5 Step and repeat
 
-`cells = rows × cols`. Каждая исходная полоса раскладывается на `ceil(copies / cells)`
-листов, все ячейки заняты копиями одной и той же полосы. Последний лист серии может быть
-заполнен частично, недостающие ячейки остаются пустыми.
+`cells = rows × cols`. Each source page is laid out over `ceil(copies / cells)` sheets; all
+cells hold copies of the same page. The last sheet of a run may be partly filled; the
+missing cells stay empty.
 
 ### 5.6 Cut and stack
 
-Число стопок равно числу ячеек: `stacks = rows × cols`. Пусть `per = ceil(n / stacks)`.
-Лист `s` из диапазона `[0, per)` получает в ячейку `j` полосу с индексом `j × per + s`;
-если индекс выходит за `n`, ячейка пустая. Ячейки заполняются по строкам.
+The number of stacks equals the number of cells: `stacks = rows × cols`. Let
+`per = ceil(n / stacks)`. Sheet `s` in the range `[0, per)` gets, in cell `j`, the page with
+index `j × per + s`; if the index is past `n`, the cell is empty. Cells are filled row by
+row.
 
-Проверено на 16 полосах и четырёх стопках: лист 1 несёт `1, 5, 9, 13`, лист 2 несёт
-`2, 6, 10, 14`. После резки каждая стопка идёт подряд.
+Checked on 16 pages and four stacks: sheet 1 carries `1, 5, 9, 13`, sheet 2 carries
+`2, 6, 10, 14`. After cutting, each stack is in consecutive order.
 
-### 5.7 Место полосы на листе
+### 5.7 Page slot on the sheet
 
-Сетка делит полезную площадь листа на равные ячейки, но полосы по ячейкам не
-центрируются. Место под полосу — самая большая полоса документа в её масштабе, места
-стоят общим блоком ровно через заданный зазор, и блок центрируется на листе. Запас листа
-уходит в поля, а не в щели между полосами: разворот брошюры смыкается на корешке, соседние
-полосы n-up делят одну линию реза.
+The grid divides the usable area of the sheet into equal cells, but pages are not centered
+in their cells. A page's slot is the largest page of the document at that page's scale; the
+slots stand together as one block exactly the given gap apart, and the block is centered on
+the sheet. Spare sheet space goes to the margins, not into spaces between pages: a booklet
+spread closes up at the spine, neighboring n-up pages share one trim line.
 
-Полоса меньше своего места встаёт по его центру. В брошюре и тетрадях она прижимается к
-корешку и центрируется поперёк него, иначе после фальцовки не дойдёт до переплёта.
+A page smaller than its slot sits at the slot's center. In booklets and signatures it is
+pushed against the spine and centered across it; otherwise, after folding, it would not reach
+the binding.
 
-### 5.8 Двусторонность
+### 5.8 Duplex
 
-Листы отдаются подряд в порядке `лицо, оборот, лицо, оборот`. Для схем `nup`,
-`stepRepeat` и `cutStack` оборот генерируется только если исходный документ
-двусторонний по смыслу задачи; в v1 эти три схемы односторонние, `side = 'single'`.
-Брошюра и тетради всегда двусторонние.
+Sheets are emitted in sequence in the order `front, back, front, back`. For the `nup`,
+`stepRepeat` and `cutStack` schemes a back is generated only if the source document is
+two-sided by the nature of the job; in v1 these three schemes are one-sided, `side = 'single'`.
+Booklets and signatures are always two-sided.
 
-Интерфейс подсказывает, какой переворот выбирать в диалоге печати: по длинной стороне
-для альбомного листа, по короткой для книжного.
+The interface hints which flip to choose in the print dialog: on the long edge for a
+landscape sheet, on the short edge for a portrait one.
 
-## 6. Метки и вылеты
+## 6. Marks and bleeds
 
-Эффективный вылет считается **отдельно для каждой стороны полосы**. Со стороны, где
-соседствует другая ячейка, предел равен половине зазора; со стороны, обращённой к краю
-листа, предел равен полю листа. Итог: `bleed_edge = min(source.bleed, предел стороны)`.
-Содержимое обрезается по `trim`, расширенному на эти четыре величины.
+The effective bleed is computed **separately for each edge of the page**. On an edge that
+borders another cell, the limit is half the gap; on an edge facing the sheet edge, the limit
+is the sheet margin. Result: `bleed_edge = min(source.bleed, edge limit)`.
+Content is clipped to `trim` expanded by these four values.
 
-Из этого следует важное для брошюры: при нулевом зазоре вылет у корешка равен нулю, а с
-внешних сторон разворота сохраняется полностью. Это правильное поведение, полосы у
-корешка соприкасаются и вылет там не нужен.
+This matters for the booklet: with zero gap, the bleed at the spine is zero, while on the
+outer edges of the spread it is kept in full. This is the correct behavior: the pages touch
+at the spine and no bleed is needed there.
 
-Если у полосы есть `TrimBox`, обрезной формат берётся из него, а `source.bleed`
-используется только как ограничитель. Если `TrimBox` отсутствует, обрезным считается
-`CropBox`, а вылет берётся из поля в интерфейсе.
+If a page has a `TrimBox`, the trim size is taken from it, and `source.bleed` is used only as
+a limit. If there is no `TrimBox`, the `CropBox` counts as the trim size, and the bleed comes
+from the field in the interface.
 
-По умолчанию интерфейс берёт вылет из файла: наименьший запас от `TrimBox` до `BleedBox` по
-всем сторонам всех полос, обрезанный краем самой полосы. Полоса без `BleedBox` обнуляет
-вылет документа: пространство за линией реза у таких файлов часто занято метками и полями,
-печатать его как вылет нельзя. Число, введённое вручную, файл не перебивает.
+By default the interface takes the bleed from the file: the smallest distance from `TrimBox`
+to `BleedBox` over all edges of all pages, clipped by the edge of the page itself. A page
+without a `BleedBox` zeroes the document's bleed: in such files the space beyond the trim
+line is often taken up by marks and margins, and it must not be printed as bleed. A number
+entered by hand is not overridden by the file.
 
-Метки реза ставятся по линиям реза, а не вокруг полос. Линии дают края занятых ячеек;
-совпадающие при нулевом зазоре сливаются в одну, пустая ячейка линий не даёт. Каждая
-линия отмечается штрихом в поле листа с обоих концов: от края блока полос на `offset`
-наружу, длиной `length`, толщиной `pen`. Внутри блока меток нет. Штрих обрезается краем
-листа, а если до края не хватает даже отступа, не рисуется. Интерфейс держит отступ не
-меньше вылета, чтобы метка не легла на вылет. Разбор того, как это делают программы
-спуска, в `docs/crop-marks-research.md`.
+Crop marks are placed along trim lines, not around pages. The lines come from the edges of
+occupied cells; lines that coincide at zero gap merge into one, and an empty cell gives no
+lines. Each line gets a stroke in the sheet margin at both ends: `offset` outward from the edge
+of the page block, `length` long, with stroke weight `pen`. There are no marks inside the
+block. A stroke is clipped by the sheet edge, and if there is not room even for the offset
+before the edge, it is not drawn. The interface keeps the offset no smaller than the bleed so
+that a mark does not land on the bleed. An analysis of how imposition software does this is
+in `docs/crop-marks-research.md`.
 
-Если файл сам нарисовал метки реза вокруг первой полосы, читатель их находит и отдаёт
-числа: отступ от линии реза, длину, перо и белую подложку. Метками считаются прямые
-штрихи на продолжении линий реза целиком за `TrimBox`, по два у каждого из четырёх углов
-с одинаковыми отступом и длиной. Более толстый штрих на том же месте — подложка: так
-метки кладёт InDesign (отступ 2.12 мм, штрих 5.29 мм, перо 0.25 pt, подложка 1.25 pt).
-При открытии такого файла метки реза включаются сами и рисуются числами файла, поле
-`auto` вмещает отступ и длину. Отступ меньше вылета здесь сохраняется: метку от фона
-вылета отбивает подложка, она рисуется белым под всеми штрихами листа. Файл без меток
-флажок не трогает.
+If the file has drawn crop marks around the first page itself, the reader finds them and
+returns the numbers: offset from the trim line, length, stroke weight and white underlay.
+Marks are straight strokes on the extension of the trim lines, lying entirely outside the
+`TrimBox`, two at each of the four corners, with the same offset and length. A thicker stroke
+in the same place is the underlay: this is how InDesign lays out marks (offset 2.12 mm,
+length 5.29 mm, stroke weight 0.25 pt, underlay 1.25 pt). When such a file is opened, crop
+marks turn on by themselves and are drawn with the file's numbers; the `auto` margin makes
+room for the offset and length. An offset smaller than the bleed is kept here: the underlay
+separates the mark from the bleed background, and it is drawn in white under all strokes on
+the sheet. A file without marks leaves the checkbox alone.
 
-В брошюре и тетрадях корешок сгибают, а не режут: края полос, обращённые к корешку,
-линий реза не дают. Метки фальцовки рисуются пунктиром на линии сгиба в полях листа и
-только в этих схемах; в n-up, step and repeat и cut and stack границы ячеек режут.
-Метки приводки ставятся в центре каждой стороны листа и только если поле листа не меньше
-восьми миллиметров.
+In booklets and signatures the spine is folded, not cut: page edges facing the spine give no
+trim lines. Fold marks are drawn as a dashed line on the fold line in the sheet margins, and
+only in these schemes; in n-up, step and repeat and cut and stack the cell boundaries are
+cut. Registration marks are placed at the middle of each sheet edge, and only if the sheet
+margin is at least eight millimeters.
 
-Цвет меток в v1 это чистый чёрный. Составной регистрационный цвет уходит в очередь 2
-вместе с PDF/X.
+In v1 the mark color is pure black. Composite registration color moves to phase 2 together
+with PDF/X.
 
-## 7. Движок
+## 7. Engine
 
-`mupdf` (npm, WASM, AGPL-3.0-or-later), одна зависимость и на разбор, и на рендер
-превью, и на запись. Работает в Web Worker, общение через Comlink.
+`mupdf` (npm, WASM, AGPL-3.0-or-later), a single dependency for parsing, preview rendering
+and writing. It runs in a Web Worker; communication goes through Comlink.
 
-Спуск делается переносом исходной полосы в форму XObject. Рецепт проверен на реальном
-файле до написания спеки:
+Imposition works by grafting the source page into a form XObject. The recipe was verified on
+a real file before the spec was written:
 
-1. Взять объект исходной полосы, прочитать её `Contents` (если массив потоков, склеить
-   через перевод строки).
-2. Перенести `Resources` в целевой документ через `graftObject`, обязательно с общей
-   `PDFGraftMap` на весь экспорт. Без карты переноса общие шрифты и изображения
-   дублируются на каждом листе и файл распухает.
-3. Собрать словарь `/Type /XObject /Subtype /Form` с `BBox` по границам полосы и
-   перенесёнными `Resources`, записать поток через `addStream`.
-4. Создать лист через `addPage(mediabox, 0, resources, contents)`, где поток содержимого
-   это последовательность `q <matrix> cm /Xn Do Q` по одной на размещение.
-5. Метки дописываются в тот же поток содержимого листа обычными операторами линий.
-6. Коробки листа проставляются через `setPageBox`.
+1. Take the source page object and read its `Contents` (if it is an array of streams, join
+   them with a newline).
+2. Graft `Resources` into the target document via `graftObject`, always with a shared
+   `PDFGraftMap` for the whole export. Without the graft map, shared fonts and images are
+   duplicated on every sheet and the file bloats.
+3. Build a `/Type /XObject /Subtype /Form` dictionary with `BBox` at the page bounds and the
+   grafted `Resources`, and write the stream via `addStream`.
+4. Create the sheet via `addPage(mediabox, 0, resources, contents)`, where the content stream
+   is a sequence of `q <matrix> cm /Xn Do Q`, one per placement.
+5. Marks are appended to the same sheet content stream with ordinary line operators.
+6. Sheet boxes are set via `setPageBox`.
 
-## 8. Интерфейс
+## 8. Interface
 
-Два экрана, ноль модальных окон.
+Two screens, zero modal windows.
 
-**Пустой экран.** Всё окно это зона перетаскивания. Одна строка текста и кнопка выбора
-файла.
+**Empty screen.** The whole window is a drop zone. One line of text and a file picker
+button.
 
-**Рабочий экран.** Сверху имя файла, число полос и размер полосы, справа пресеты и
-кнопка экспорта. Центр занимает превью одного листа целиком. Под превью навигация:
-стрелки, номер листа, метка лицо или оборот; переключение стороны также по пробелу.
-Метка стороны показывается только для брошюры и тетрадей, остальные схемы в v1
-односторонние.
-Слева внизу зум. Справа колонка параметров, четыре группы, всегда развёрнутые, в
-порядке принятия решений:
+**Work screen.** At the top: file name, page count and page size; on the right, presets and
+the export button. The center holds a preview of one whole sheet. Below the preview is
+navigation: arrows, sheet number, a “front” or “back” label; the side also toggles with the
+space bar. The side label shows only for booklets and signatures; the other schemes are
+one-sided in v1.
+Zoom sits at the bottom left. On the right is the parameter column, four groups, always
+expanded, in the order decisions are made:
 
-| Группа | Контролы |
+| Group | Controls |
 |---|---|
-| Схема | выбор из четырёх, плюс параметры выбранной: тетрадь, сторона переплёта, выползание; либо строки и колонки; либо копии; либо сетка стопок |
-| Лист | формат, ориентация, поля, зазор |
-| Полосы | вылет, масштаб, выравнивание разных размеров |
-| Метки | тип меток реза, длина, отступ, фальцовка, приводка |
+| Scheme | a choice of four, plus the chosen scheme's parameters: signature, binding side, creep; or rows and columns; or copies; or the stack grid |
+| Sheet | format, orientation, margins, gap |
+| Pages | bleed, scale, normalizing different sizes |
+| Marks | crop mark type, length, offset, fold, registration |
 
-Шестнадцать контролов суммарно. Пресеты умеют только сохранить и применить, менеджера
-пресетов нет. Экспорт без диалога настроек: файл сохраняется рядом с исходным с
-суффиксом `-imposed`.
+Sixteen controls in total. Presets can only be saved and applied; there is no preset
+manager. Export has no settings dialog: the file is saved next to the source with the suffix
+`-imposed`.
 
-## 9. Ошибки
+## 9. Errors
 
-Все ошибки это значения. Домен объявляет размеченное объединение, у каждого варианта в
-интерфейсе есть действие восстановления.
+All errors are values. The domain declares a discriminated union, and each variant has a
+recovery action in the interface.
 
-| Отказ или предупреждение | Причина | Что предлагает интерфейс |
+| Failure or warning | Cause | What the interface offers |
 |---|---|---|
-| `NotAPdf` | битый или чужой заголовок | выбрать другой файл |
-| `PasswordRequired` | документ под паролем | поле ввода пароля |
-| `WrongPassword` | пароль не подошёл | то же поле с сообщением об ошибке |
-| `MixedPageSizes` | полосы разного размера | выровнять по самой большой |
-| `NoTrimBox` | вылет определить нечем | подсветка поля вылета |
-| `PaddedToFolio` | полос не кратно четырём | сообщение, сколько добавлено |
-| `DoesNotFit` | полосы не влезают в масштабе 100% | другой формат листа или режим «вписать» |
-| `Aborted` | отмена пользователем | вернуться к параметрам |
-| `OutOfMemory` | воркер не вытянул файл | пересоздать воркер, предложить меньший файл |
+| `NotAPdf` | broken or foreign header | pick another file |
+| `PasswordRequired` | password-protected document | a password input field |
+| `WrongPassword` | the password did not match | the same field with an error message |
+| `MixedPageSizes` | pages differ in size | normalize to the largest |
+| `NoTrimBox` | nothing to determine the bleed from | highlight the bleed field |
+| `PaddedToFolio` | page count is not a multiple of four | a message saying how many were added |
+| `DoesNotFit` | pages do not fit at 100% scale | another sheet format or “fit” mode |
+| `Aborted` | canceled by the user | return to the parameters |
+| `OutOfMemory` | the worker could not handle the file | recreate the worker, suggest a smaller file |
 
-`MixedPageSizes`, `NoTrimBox` и `PaddedToFolio` это предупреждения плана, а не отказы:
-план всё равно строится, но интерфейс показывает их до экспорта.
+`MixedPageSizes`, `NoTrimBox` and `PaddedToFolio` are plan warnings, not failures: the plan is
+still built, but the interface shows them before export.
 
-Всякая операция в воркере принимает `AbortSignal`. Отмена и нехватка памяти ведут к
-пересозданию воркера, состояние интерфейса при этом сохраняется.
+Every operation in the worker takes an `AbortSignal`. Cancellation and running out of memory
+lead to recreating the worker; the interface state is preserved.
 
-## 10. Производительность и память
+## 10. Performance and memory
 
-Замер, сделанный до написания спеки, на файле 88 МБ из 32 полос:
+A measurement taken before the spec was written, on an 88 MB file of 32 pages:
 
-| Движок | Время | Пик памяти |
+| Engine | Time | Peak memory |
 |---|---|---|
-| mupdf (WASM) | 0.25 с | 688 МБ |
-| pdf-lib (JS) | 0.23 с | 275 МБ |
+| mupdf (WASM) | 0.25 s | 688 MB |
+| pdf-lib (JS) | 0.23 s | 275 MB |
 
-Правила, вытекающие из замера:
+Rules that follow from the measurement:
 
-- Документ живёт только в воркере. В главный поток едут описание и миниатюры.
-- Миниатюры рендерятся с ограничением по длинной стороне, хранятся как `ImageBitmap`,
-  вытесняются по LRU. Превью листа рисуется из миниатюр, движок при этом не трогается.
-- При экспорте используется общая `PDFGraftMap`.
-- Пик при экспорте равен входному документу плюс выходной буфер: `saveToBuffer`
-  возвращает буфер целиком, потоковой записи движок не даёт.
-- Порог предупреждения о размере файла определяется замером на Chrome и Safari
-  отдельно и фиксируется в `docs/architecture.md`. У Safari лимит на кучу WASM жёстче.
+- The document lives only in the worker. The description and thumbnails travel to the main
+  thread.
+- Thumbnails are rendered with a cap on the long side, stored as `ImageBitmap`, evicted by
+  LRU. The sheet preview is drawn from thumbnails; the engine is not touched.
+- Export uses a shared `PDFGraftMap`.
+- Peak memory during export equals the input document plus the output buffer:
+  `saveToBuffer` returns the whole buffer, and the engine offers no streaming write.
+- The file-size warning threshold is determined by measuring on Chrome and Safari
+  separately and is recorded in `docs/architecture.md`. Safari has a stricter WASM heap limit.
 
-## 11. Тесты
+## 11. Tests
 
-**Домен, полное покрытие.** Планировщики проверяются золотыми наборами: брошюра из 16
-полос обязана дать `16|1`, `2|15`, `14|3`, `4|13`, `12|5`, `6|11`, `10|7`, `8|9`;
-cut-and-stack на четыре стопки обязан дать `1, 5, 9, 13` на первом листе.
+**Domain, full coverage.** Planners are checked against golden sets: a 16-page booklet must
+give `16|1`, `2|15`, `14|3`, `4|13`, `12|5`, `6|11`, `10|7`, `8|9`; cut-and-stack on four
+stacks must give `1, 5, 9, 13` on the first sheet.
 
-**Свойства-инварианты.** Каждая исходная полоса встречается в плане ровно один раз.
-Число размещений равно числу листов на число ячеек. Каждая стопка cut-and-stack после
-резки даёт непрерывную возрастающую последовательность. Сдвиг выползания монотонно
-растёт от внешнего листа к внутреннему.
+**Property invariants.** Every source page appears in the plan exactly once. The number of
+placements equals the number of sheets times the number of cells. Every cut-and-stack stack,
+after cutting, gives a continuous increasing sequence. The creep shift grows monotonically
+from the outer sheet to the inner one.
 
-**Интеграция обратным разбором.** Писатель исполняет план на фикстуре, результат
-читается обратно движком, тест утверждает физические координаты каждой полосы и меток.
-Фикстуры генерируются кодом: документ из `N` пронумерованных полос заданного размера.
+**Integration by read-back.** The writer executes the plan on a fixture, the result is
+read back by the engine, and the test asserts the physical coordinates of every page and of
+the marks. Fixtures are generated in code: a document of `N` numbered pages of a given size.
 
-**Сквозные тесты Playwright.** Бросить файл, сменить схему, экспортировать, убедиться,
-что файл сохранён и содержит ожидаемое число листов.
+**Playwright end-to-end tests.** Drop a file, change the scheme, export, check that the file
+is saved and contains the expected number of sheets.
 
-**Граничные случаи.** Нулевой размер файла, испорченный заголовок, зашифрованный
-документ, полосы разного размера, отмена посреди экспорта.
+**Edge cases.** Zero file size, corrupted header, encrypted document, pages of different
+sizes, cancellation mid-export.
 
-Всё запускается одной командой, без обращения к сети.
+Everything runs with one command, without network access.
 
-## 12. Стек
+## 12. Stack
 
-| Слой | Выбор | Обоснование |
+| Layer | Choice | Rationale |
 |---|---|---|
-| Рантайм и пакеты | bun | установлен, быстрее, покрывает и тест-раннер |
-| Сборка | Vite 6 | нативный ESM, быстрый HMR |
-| Язык | TypeScript 5, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `isolatedModules` | требование a.md |
-| UI | React 19 плюс безголовые примитивы Radix | доступность из коробки |
-| Стили | Tailwind v4 | нулевой рантайм |
-| Клиентское состояние | Zustand, срезами | параметры задания, состояние файла, UI-флаги |
-| Валидация внешних данных | zod | пресеты и сообщения воркера |
-| Линт и формат | Biome, нулевая терпимость к предупреждениям | требование a.md |
-| Тесты | Vitest и Playwright | требование a.md |
-| Воркер | Comlink | типизированный мост |
-| Движок PDF | mupdf | раздел 7 |
+| Runtime and packages | bun | installed, faster, also covers the test runner |
+| Build | Vite 6 | native ESM, fast HMR |
+| Language | TypeScript 5, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `isolatedModules` | required by a.md |
+| UI | React 19 plus Radix headless primitives | accessibility out of the box |
+| Styles | Tailwind v4 | zero runtime |
+| Client state | Zustand, in slices | job parameters, file state, UI flags |
+| Validation of external data | zod | presets and worker messages |
+| Lint and format | Biome, zero tolerance for warnings | required by a.md |
+| Tests | Vitest and Playwright | required by a.md |
+| Worker | Comlink | typed bridge |
+| PDF engine | mupdf | section 7 |
 
-Запрещены `any`, приведения через `as`, подавления компилятора. Внешние данные
-сужаются через zod или пользовательские type guard из `unknown`.
+`any`, `as` casts and compiler suppressions are forbidden. External data is narrowed from
+`unknown` through zod or user-defined type guards.
 
-Лицензия проекта AGPL-3.0-or-later, наследуется от mupdf. Для открытого кода с публичным
-хостингом это не ограничение, но зафиксировано осознанно: закрыть исходники позже, не
-меняя движок, не получится.
+The project license is AGPL-3.0-or-later, inherited from mupdf. For open source code with
+public hosting this is not a restriction, but it is recorded deliberately: closing the source
+later without changing the engine will not be possible.
 
-## 13. Границы v1
+## 13. v1 boundaries
 
-Не входит и уходит в следующие очереди:
+Not included; deferred to later phases:
 
-**Очередь 2, допечатная обвязка.** Нумерация страниц и Bates, штампы текстом и
-страницами, замазывание областей, вставка пустых и чужих полос, перестановки, шкалы
-контроля цвета, составной регистрационный цвет, PDF/X.
+**Phase 2, prepress extras.** Page numbering and Bates, text and page stamps, redaction of
+areas, inserting blank pages and pages from other documents, reordering, color control strips,
+composite registration color, PDF/X.
 
-**Очередь 3, автоматизация.** Переменные данные, записанные сценарии, ручной спуск
-мышью, отчёт по спуску, пакетная обработка папкой.
+**Phase 3, automation.** Variable data, recorded scripts, manual imposition with the mouse,
+imposition report, batch processing of a folder.
 
-Также вне v1: изображения на входе, сборка из нескольких файлов, спуск под Dutch cut,
-превью разворотами, менеджер пресетов.
+Also outside v1: images as input, assembling from several files, Dutch cut imposition,
+preview in spreads, preset manager.
 
-## 14. Риски
+## 14. Risks
 
-1. **Память в Safari.** Самый вероятный источник отказа на больших файлах. Смягчение:
-   ранний замер порога, честное предупреждение до старта экспорта, отмена без падения.
-2. **Дубли ресурсов при переносе.** Забытая карта переноса раздувает выходной файл в
-   разы. Смягчение: тест на размер выходного файла относительно входного.
-3. **Документы с разными размерами полос.** Молчаливая раскладка такого документа даёт
-   визуально сломанный результат. Смягчение: предупреждение плана и режим выравнивания.
-4. **AGPL.** Решение необратимо в рамках выбранного движка. Зафиксировано в разделе 12.
+1. **Memory in Safari.** The most likely source of failure on large files. Mitigation:
+   measure the threshold early, warn honestly before export starts, cancel without a crash.
+2. **Duplicate resources when grafting.** A forgotten graft map bloats the output file
+   several times over. Mitigation: a test on output file size relative to input.
+3. **Documents with mixed page sizes.** Silently laying out such a document gives a visually
+   broken result. Mitigation: a plan warning and a normalizing mode.
+4. **AGPL.** The decision is irreversible within the chosen engine. Recorded in section 12.

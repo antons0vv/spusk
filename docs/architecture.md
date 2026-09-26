@@ -1,126 +1,128 @@
 # spusk
 
-Браузерный инструмент спуска полос. Всё считается на клиенте, файлы никуда не уходят.
+A browser-based imposition tool. Everything is computed on the client; files never leave it.
 
-## Команды
+## Commands
 
-- `bun run dev` — интерфейс на локальном сервере (Vite)
-- `bun run build` — статическая сборка в `dist/`
-- `bun run test` — тесты (Vitest)
-- `bun run e2e` — сквозные проверки в браузере; нужен установленный Google Chrome
-- `bun run typecheck` — проверка типов
-- `bun run check` — линт и формат (Biome)
-- `bun run deploy` — сборка и выкладка на tools.volnenko.com: воркер Cloudflare раздаёт `dist/`
-  как статику, сервера нет. Настройки в `wrangler.jsonc`, кэш хэшированных файлов в `public/_headers`
+- `bun run dev` — interface on a local server (Vite)
+- `bun run build` — static build into `dist/`
+- `bun run test` — tests (Vitest)
+- `bun run e2e` — end-to-end checks in the browser; requires Google Chrome to be installed
+- `bun run typecheck` — type check
+- `bun run check` — lint and format (Biome)
+- `bun run deploy` — build and deploy to tools.volnenko.com: a Cloudflare Worker serves `dist/`
+  as static files, there is no server. Settings in `wrangler.jsonc`, caching of hashed files in `public/_headers`
 
-## Архитектура
+## Architecture
 
-- `src/domain/` — чистая логика раскладки. Зависимостей от PDF, DOM и воркеров нет.
-- `src/application/` — сценарии и порты.
-- `src/infrastructure/` — адаптеры mupdf и фоновый поток с движком.
-- `src/presentation/` — React: экран сброса файла, рабочий экран, превью листа.
-- `src/composition-root.tsx` — точка входа: собирает движок в потоке и отдаёт его интерфейсу.
-- `test/fixtures/` — генератор тестовых PDF и обратный разбор результата. Генератор умеет
-  вылет и BleedBox, смещённое начало координат, поворот, кропбокс уже медиабокса, содержимое двумя
-  потоками, полосу без содержимого и группу прозрачности.
+- `src/domain/` — pure layout logic. No dependencies on PDF, the DOM or workers.
+- `src/application/` — use cases and ports.
+- `src/infrastructure/` — mupdf adapters and the engine worker.
+- `src/presentation/` — React: file drop screen, work screen, sheet preview.
+- `src/composition-root.tsx` — entry point: builds the engine in the worker and hands it to the interface.
+- `test/fixtures/` — test PDF generator and read-back of the result. The generator can produce
+  bleed and BleedBox, a shifted origin, rotation, a CropBox smaller than the MediaBox, content in
+  two streams, a page with no content and a transparency group.
 
-Правило импортов: `domain` ничего не импортирует из проекта, `application` только `domain`,
-`infrastructure` — `domain` и `application`, `presentation` — `domain` и `application`, но
-никогда `infrastructure`. Встречаются они только в `composition-root.tsx`.
+Import rule: `domain` imports nothing from the project, `application` only `domain`,
+`infrastructure` — `domain` and `application`, `presentation` — `domain` and `application`, but
+never `infrastructure`. They meet only in `composition-root.tsx`.
 
-### Домен
+### Domain
 
-`plan(job, doc)` — единственная точка входа в раскладку. Возвращает `Plan`, который потребляют
-и превью, и писатель PDF. Внутри: `buildGrid` → `*Order` → `assemble` → `applyCreep` → `resolveMarks`.
+`plan(job, doc)` is the single entry point into layout. It returns a `Plan`, which both the
+preview and the PDF writer consume. Inside: `buildGrid` → `*Order` → `assemble` → `applyCreep` → `resolveMarks`.
 
-### Читатель
+### Reader
 
-`MupdfReader` отдаёт домену описание документа и дескриптор. Дескриптор помечен происхождением
-читателя: чужой дескриптор в чужом читателе не открывает ничего. Защищённый документ тоже
-остаётся открытым — отказ `PasswordRequired` несёт дескриптор, с ним идут в `authenticate`;
-неверный пароль это отдельный отказ `WrongPassword`.
+`MupdfReader` gives the domain a description of the document and a handle. The handle is tagged
+with the reader's origin: a handle from one reader opens nothing in another. A protected document
+also stays open — the `PasswordRequired` failure carries the handle, which is then passed to
+`authenticate`; a wrong password is a separate failure, `WrongPassword`.
 
-Метки реза, нарисованные самим файлом, читатель ищет по обводкам первой полосы: устройство
-mupdf собирает отрезки в пространстве коробок, а разбор (`crop-marks.ts`) чистый и от mupdf не
-зависит. Битое содержимое не мешает открыть документ, такая полоса просто считается без меток.
+The reader looks for crop marks drawn by the file itself in the strokes of the first page: a mupdf
+device collects line segments in box space, and the parsing (`crop-marks.ts`) is pure and does not
+depend on mupdf. Broken content does not prevent opening the document; such a page is simply
+treated as having no marks.
 
-### Писатель
+### Writer
 
-`MupdfWriter` исполняет `Plan`. Каждая исходная полоса превращается в форму XObject один раз и
-кэшируется, ресурсы и группа прозрачности переносятся через общую `PDFGraftMap`, иначе шрифты и
-картинки дублируются на каждом листе, а блендинг считается относительно чужого фона.
+`MupdfWriter` executes the `Plan`. Each source page is turned into a form XObject once and cached;
+resources and the transparency group are carried over through a shared `PDFGraftMap`, otherwise
+fonts and images get duplicated on every sheet, and blending is computed against a foreign backdrop.
 
-### Приведённая полоса
+### Normalized page
 
-Читатель и писатель обязаны считать от одной коробки — `CropBox`, пересечённого с `MediaBox`
-(движок строит трансформ полосы именно по ней; при пустом пересечении подставляет Letter).
-Эта же коробка задаёт рамку формы и заодно прячет содержимое за кропбоксом. Движок отдаёт
-коробки в своём пространстве — начало в левом верхнем углу, ось Y вниз, — поэтому читатель
-переворачивает ось на границе адаптера: домен и писатель считают лист в пространстве PDF.
+The reader and the writer must compute from the same box — `CropBox` intersected with `MediaBox`
+(the engine builds the page transform from exactly this box; if the intersection is empty, it
+substitutes Letter). The same box sets the form's bounding box and also hides content outside the
+CropBox. The engine returns boxes in its own space — origin in the top left corner, Y axis pointing
+down — so the reader flips the axis at the adapter boundary: the domain and the writer compute the
+sheet in PDF space.
 
-### Поток с движком
+### Engine worker
 
-Все три адаптера живут в одном Web Worker и видны интерфейсу через `EnginePort`. Клиент
-(`engine-client.ts`) переживает смерть потока: отмена экспорта и падение wasm обрывают все
-незавершённые вызовы значением `Aborted` или `Crashed`, а не вечным ожиданием. После этого
-интерфейс переоткрывает документ из того же файла, пароль помнит сам. Дескриптор помечен
-случайным происхождением, поэтому новый поток не примет дескриптор от старого.
+All three adapters live in one Web Worker and are visible to the interface through `EnginePort`.
+The client (`engine-client.ts`) survives the death of the worker: cancelling an export and a wasm
+crash end all pending calls with an `Aborted` or `Crashed` value rather than an endless wait. After
+that the interface reopens the document from the same file and remembers the password itself. The
+handle is tagged with a random origin, so a new worker won't accept a handle from the old one.
 
-Поток шлёт `ready` после подъёма движка: mupdf грузится верхнеуровневым await, и сообщения,
-пришедшие раньше, теряются. В `vite.config.ts` mupdf исключён из предсборки зависимостей,
-иначе теряется путь к wasm.
+The worker sends `ready` once the engine is up: mupdf loads with a top-level await, and messages
+that arrive earlier are lost. In `vite.config.ts` mupdf is excluded from dependency pre-bundling,
+otherwise the path to the wasm is lost.
 
-### Превью
+### Preview
 
-Превью рисует лист из растров полос через ту же матрицу размещения и тот же клип по вылету,
-что у писателя. Растры тянутся ступенями 256–2048 px только для видимого листа, по одному за
-раз, и вытесняются по давности. Края растров прижаты к пикселям экрана, иначе между
-соседними полосами светится шов.
+The preview draws the sheet from page rasters using the same placement matrix and the same bleed
+clip as the writer. Rasters are fetched in steps of 256–2048 px, only for the visible sheet, one at
+a time, and evicted oldest first. Raster edges are snapped to screen pixels, otherwise a seam shows
+between neighboring pages.
 
-### Интерфейс
+### Interface
 
-Одна гарнитура (Alice, лежит в `src/presentation/fonts/` вместе с лицензией OFL) и один
-кегль. Иерархия держится положением, отбивкой и цветом: выбранное чёрное, остальное серое.
-Окно — лист с метками реза в углах. Все экраны стоят в одном каркасе (`shell.tsx`): боковая
-колонка постоянной ширины слева, рабочее поле справа, граница между ними отмечена меткой
-реза. На пустом экране в колонке «о проекте», на рабочем — файл, параметры и действия
-внизу колонки; «about» подменяет параметры, превью остаётся. Тексты интерфейса английские и
-строчные. Значок вкладки (`public/favicon.svg`) — одна метка реза на белом
-листе, ico и значок для iOS растрированы из него; картинка для ссылок — пустой экран,
-увеличенный в 2.2 раза. Геометрия
-меток в интерфейс не выведена, величины зашиты в `application/settings.ts`.
+One typeface (Alice, stored in `src/presentation/fonts/` together with its OFL license) and one
+type size. Hierarchy is carried by position, spacing and color: what is selected is black,
+everything else is gray. The window is a sheet with crop marks in the corners. All screens sit in
+one shell (`shell.tsx`): a fixed-width sidebar on the left, the workspace on the right, the
+boundary between them marked with a crop mark. On the empty screen the sidebar holds “about”; on
+the work screen it holds the file, the parameters, and actions at the bottom of the sidebar;
+“about” replaces the parameters, the preview stays. Interface text is English and lowercase. The
+tab icon (`public/favicon.svg`) is a single crop mark on a white sheet; the ico and the iOS icon
+are rasterized from it; the image for link previews is the empty screen scaled up 2.2 times. Mark
+geometry is not exposed in the interface; the values are hard-coded in `application/settings.ts`.
 
-## Соглашения
+## Conventions
 
-- Внутренняя единица длины — пункт (`Pt`). Миллиметры только на границе интерфейса.
-- Сетка ячеек построчная, строка ноль — верх листа. Геометрия меток берётся из координат
-  ячеек, а не из долей листа: доли совпадают с ячейками только при двух колонках.
-- Отказ по параметрам несёт метку `what` (сетка, копии, тетрадь, лист, поля, документ,
-  полосы). Строка отказа — для отчётов и тестов, решения интерфейс принимает по метке.
-- Ожидаемые отказы возвращаются через `Result`. `throw` — только нарушение инварианта в адаптере.
-- Единственное разрешённое приведение типа — конструктор `pt()` в `src/domain/units.ts`. Линтер это не проверяет, правило держится ревью.
+- The internal unit of length is the point (`Pt`). Millimeters only at the interface boundary.
+- The cell grid is row-major; row zero is the top of the sheet. Mark geometry is taken from cell
+  coordinates, not from fractions of the sheet: fractions match the cells only with two columns.
+- A parameter failure carries a `what` tag (grid, copies, signature, sheet, margins, document,
+  pages). The failure string is for reports and tests; the interface makes decisions by the tag.
+- Expected failures are returned through `Result`. `throw` is only for an invariant violation in an adapter.
+- The only allowed type cast is the `pt()` constructor in `src/domain/units.ts`. The linter doesn't check this; the rule is upheld by review.
 
-## Замеры
+## Measurements
 
-Строка ниже заполняется числами, которые напечатала команда замера из задачи 14.
+The row below is filled in with the numbers printed by the measurement command from task 14.
 
-| Файл | Листов | Время | Пик RSS |
+| File | Sheets | Time | Peak RSS |
 |---|---|---|---|
-| во-да.pdf, 88 МБ, 32 полосы | 16 | 75 мс | 748 МБ |
+| vo-da.pdf, 88 MB, 32 pages | 16 | 75 ms | 748 MB |
 
-Порог предупреждения о размере файла в интерфейсе выбирается по этим числам и уточняется
-в браузере отдельно для Chrome и Safari.
+The file size warning threshold in the interface is chosen from these numbers and refined in the
+browser separately for Chrome and Safari.
 
-## Что уже готово
+## What's ready
 
-Ядро спуска целиком: домен (`plan`), адаптеры чтения, записи и растра, поток с движком и
-интерфейс: сброс файла, пароль, четыре схемы с параметрами, подбор листа `auto`, превью
-листа, экспорт с ходом работы и отменой.
+The whole imposition core: the domain (`plan`), the reader, writer and raster adapters, the engine
+worker and the interface: file drop, password, four schemes with parameters, `auto` sheet
+selection, sheet preview, export with progress and cancel.
 
-## Спека
+## Spec
 
 `docs/design.md`
 
-## Лицензия
+## License
 
-AGPL-3.0-or-later, унаследована от mupdf.
+AGPL-3.0-or-later, inherited from mupdf.

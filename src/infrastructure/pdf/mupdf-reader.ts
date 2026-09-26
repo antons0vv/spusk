@@ -13,10 +13,10 @@ import { pt } from '../../domain/units.js'
 import { cropMarksFrom, type Stroke } from './crop-marks.js'
 
 /**
- * Движок отдаёт коробки полосы в своём пространстве: начало в левом верхнем углу
- * приведённой полосы, ось Y вниз. Домен и писатель считают в пространстве PDF:
- * начало внизу слева, ось Y вверх. Переворот делается здесь, на границе адаптера,
- * иначе полоса со смещённым TrimBox уехала бы по вертикали на разницу отступов.
+ * The engine returns page boxes in its own space: origin at the top-left corner of the
+ * normalized page, Y axis down. The domain and the writer work in PDF space: origin at
+ * bottom left, Y axis up. The flip happens here, at the adapter boundary; otherwise a page
+ * with an offset TrimBox would shift vertically by the difference in offsets.
  */
 const rectFrom = (box: mupdf.Rect, pageHeight: number): Rect =>
   rect(box[0], pageHeight - box[3], box[2] - box[0], box[3] - box[1])
@@ -31,8 +31,8 @@ const describe = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause)
 
 /**
- * Отрезки всех обводок полосы в том же пространстве, что и коробки: из них ищутся метки
- * реза, нарисованные самим файлом. Кривые меткой быть не могут и пропускаются.
+ * Segments of every stroked path on the page, in the same space as the boxes: crop marks
+ * drawn by the file itself are searched for among them. Curves cannot be a mark and are skipped.
  */
 const strokesOf = (page: mupdf.Page, pageHeight: number): readonly Stroke[] => {
   const strokes: Stroke[] = []
@@ -67,8 +67,8 @@ const strokesOf = (page: mupdf.Page, pageHeight: number): readonly Stroke[] => {
 }
 
 /**
- * Метки реза первой полосы. Битое содержимое не мешает открыть документ: полоса без
- * разборчивых обводок просто считается полосой без меток.
+ * Crop marks of the first page. Broken content does not stop the document from opening: a page
+ * without readable strokes simply counts as a page without marks.
  */
 const cropMarksOf = (page: mupdf.Page, pageHeight: number, trim: Rect): CropGeometry | null => {
   try {
@@ -78,7 +78,7 @@ const cropMarksOf = (page: mupdf.Page, pageHeight: number, trim: Rect): CropGeom
   }
 }
 
-/** Сотая доля пункта: разные генераторы PDF округляют размеры по-своему. */
+/** A hundredth of a point: PDF generators each round sizes their own way. */
 const SAME = 0.01
 
 const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
@@ -88,8 +88,8 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
     const page = doc.loadPage(i)
     const hasTrimBox = !page.getObject().get('TrimBox').isNull()
     const hasBleedBox = !page.getObject().get('BleedBox').isNull()
-    // Приведённая полоса: движок строит её по CropBox, пересечённому с MediaBox,
-    // и от неё же отсчитывает остальные коробки.
+    // The normalized page: the engine builds it from the CropBox intersected with the
+    // MediaBox, and measures the other boxes from it too.
     const bounds = page.getBounds()
     const height = bounds[3]
     const trim = rectFrom(page.getBounds(hasTrimBox ? 'TrimBox' : 'CropBox'), height)
@@ -98,8 +98,8 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
       trim,
       media: rectFrom(page.getBounds('MediaBox'), height),
       hasTrimBox,
-      // За краем приведённой полосы содержимого нет: форма писателя его отсекает,
-      // поэтому объявленный вылет обрезается тем же краем.
+      // There is no content beyond the edge of the normalized page: the writer's form clips
+      // it, so the declared bleed is cut at the same edge.
       bleed: hasBleedBox ? rectFrom(intersect(page.getBounds('BleedBox'), bounds), height) : null,
     })
   }
@@ -118,13 +118,13 @@ const infoFrom = (doc: mupdf.PDFDocument): DocumentInfo => {
 }
 
 /**
- * Каждому читателю своё происхождение: по нему дескриптор узнаёт своего хозяина.
- * Случайное, а не счётчик: пересозданный поток начинает счёт заново и принял бы
- * дескриптор от прежнего потока, молча отдав вместо документа другой.
+ * Each reader gets its own origin: by it a handle recognizes its owner.
+ * Random rather than a counter: a recreated worker starts counting from scratch and would
+ * accept a handle from the previous worker, silently returning a different document instead.
  */
 const nextOrigin = (): string => `mupdf-reader-${crypto.randomUUID()}`
 
-/** Читает PDF через mupdf. Документ остаётся открытым до вызова close. */
+/** Reads PDFs through mupdf. A document stays open until close is called. */
 export class MupdfReader implements DocumentReaderPort {
   private readonly origin = nextOrigin()
   private nextId = 1
@@ -137,25 +137,25 @@ export class MupdfReader implements DocumentReaderPort {
     } catch {
       return err({ kind: 'NotAPdf' })
     }
-    // Статический метод открытия объявлен возвращающим общий документ,
-    // поэтому сужаем штатным способом, а не приведением типа.
+    // The static open method is declared to return a generic document,
+    // so narrow it the supported way rather than with a type cast.
     const doc = opened.asPDF()
     if (doc === null) {
       opened.destroy()
       return err({ kind: 'NotAPdf' })
     }
     if (doc.needsPassword()) {
-      // Описание защищённого документа до расшифровки не построить, но дескриптор
-      // нужен уже сейчас: без него пароль было бы некуда прислать.
+      // A protected document cannot be described before decryption, but the handle is
+      // needed right now: without it there would be nowhere to send the password.
       return err({ kind: 'PasswordRequired', handle: this.keep(doc) })
     }
     let info: DocumentInfo
     try {
-      // Описание считается до записи в хранилище: если обход полос упадёт,
-      // в хранилище не останется документа, который некому закрыть.
+      // The description is computed before the document goes into the store: if walking
+      // the pages fails, the store is not left holding a document nobody would close.
       info = infoFrom(doc)
     } catch (cause) {
-      // Документ распарсился, но дерево полос оказалось повреждено.
+      // The document parsed, but the page tree turned out to be damaged.
       doc.destroy()
       return err({ kind: 'Unreadable', message: describe(cause) })
     }
@@ -164,7 +164,7 @@ export class MupdfReader implements DocumentReaderPort {
 
   authenticate(handle: DocumentHandle, password: string): Result<OpenedDocument, OpenError> {
     const doc = this.held(handle)
-    if (doc === undefined) return err({ kind: 'Unreadable', message: 'документ уже закрыт' })
+    if (doc === undefined) return err({ kind: 'Unreadable', message: 'document is already closed' })
     if (doc.authenticatePassword(password) === 0) return err({ kind: 'WrongPassword', handle })
     try {
       return ok({ handle, info: infoFrom(doc) })
@@ -180,12 +180,12 @@ export class MupdfReader implements DocumentReaderPort {
     this.open_.delete(handle.id)
   }
 
-  /** Внутренний доступ для писателя: тот же документ, без повторного разбора. */
+  /** Internal access for the writer: the same document, without parsing it again. */
   document(handle: DocumentHandle): mupdf.PDFDocument | undefined {
     return this.held(handle)
   }
 
-  /** Кладёт документ в хранилище и выдаёт помеченный дескриптор. */
+  /** Puts the document in the store and issues a tagged handle. */
   private keep(doc: mupdf.PDFDocument): DocumentHandle {
     const id = this.nextId
     this.nextId += 1
@@ -194,8 +194,8 @@ export class MupdfReader implements DocumentReaderPort {
   }
 
   private held(handle: DocumentHandle): mupdf.PDFDocument | undefined {
-    // Дескриптор чужого читателя не открывает чужой документ: номера у читателей
-    // независимы и наверняка пересекаются.
+    // A handle from another reader does not open a document that is not its own: the
+    // readers' numbers are independent and are bound to overlap.
     if (handle.origin !== this.origin) return undefined
     return this.open_.get(handle.id)
   }

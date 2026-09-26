@@ -6,8 +6,8 @@ const slotFor = (index: number, pageCount: number): Slot =>
   index < pageCount ? page(index) : BLANK
 
 /**
- * Порядок полос для сшивки на скрепку. При folio = 'all' весь документ идёт
- * одной тетрадью, иначе режется на тетради по folio полос.
+ * Page order for a saddle-stitch booklet. With folio = 'all' the whole document goes
+ * as one signature, otherwise it is split into signatures of folio pages.
  */
 export const bookletOrder = (pageCount: number, folio: number | 'all'): readonly Side[] => {
   const chunk = folio === 'all' ? roundUpTo4(pageCount) : roundUpTo4(folio)

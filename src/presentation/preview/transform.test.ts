@@ -31,18 +31,18 @@ const at = (m: Parameters<typeof apply>[0], x: number, y: number) => {
   return { x: p.x, y: p.y }
 }
 
-describe('растр полосы на холсте', () => {
-  it('лист вписывается по центру', () => {
+describe('page raster on the canvas', () => {
+  it('the sheet is fitted in the center', () => {
     const view = fitView(A4_LANDSCAPE, { w: 1000, h: 1000 })
     expect(view.x).toBeCloseTo(0, 6)
     expect(view.y).toBeCloseTo((1000 - (210 / 297) * 1000) / 2, 6)
   })
 
-  it('углы растра правой полосы разворота попадают в углы её линии реза', () => {
+  it('raster corners of the right page of a spread land on the corners of its trim line', () => {
     const built = plan(job, doc)
-    if (!built.ok) throw new Error('план не построен')
+    if (!built.ok) throw new Error('plan not built')
     const right = built.value.sheets[0]?.placements[1]
-    if (right === undefined) throw new Error('нет размещения')
+    if (right === undefined) throw new Error('no placement')
     const view = fitView(A4_LANDSCAPE, { w: 1188, h: 840 })
     const raster = { width: 297, height: 420, page: size(mm(148.5), mm(210)) }
     const m = rasterToCanvas(raster, right.matrix, A4_LANDSCAPE, view)
@@ -58,7 +58,7 @@ describe('растр полосы на холсте', () => {
     expect(bottomRight.y).toBeCloseTo(trim.y + trim.h, 6)
   })
 
-  it('края растра прижимаются к целым пикселям, соседние полосы сходятся без шва', () => {
+  it('raster edges snap to whole pixels, neighboring pages meet without a seam', () => {
     const left = snapToPixels([0.3337, 0, 0, -0.3337, pt(10.4), pt(300.6)], 900, 900)
     const right = snapToPixels(
       [0.3337, 0, 0, -0.3337, pt(10.4 + 0.3337 * 900), pt(300.6)],
@@ -72,7 +72,7 @@ describe('растр полосы на холсте', () => {
     expect(Number.isInteger(left[3] * 900 + left[5])).toBe(true)
   })
 
-  it('повёрнутую матрицу не трогает', () => {
+  it('leaves a rotated matrix alone', () => {
     const turned: Matrix = [0, 1, -1, 0, pt(3.5), pt(2.5)]
     expect(snapToPixels(turned, 10, 10)).toEqual(turned)
   })

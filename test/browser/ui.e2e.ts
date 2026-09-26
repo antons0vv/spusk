@@ -27,11 +27,11 @@ const exported = async (): Promise<Uint8Array> => {
   return new Uint8Array(await readFile(path))
 }
 
-/** Операторы содержимого первого листа: по ним видно, чем нарисованы метки. */
+/** Content operators of the first sheet: they show what the marks are drawn with. */
 const contentsOf = (bytes: Uint8Array): string => {
   const opened = mupdf.Document.openDocument(bytes, 'application/pdf').asPDF()
-  if (opened === null) throw new Error('экспорт не PDF')
-  // Сужение до PDF, иначе тип полосы остаётся общим и словаря у неё нет.
+  if (opened === null) throw new Error('export is not a PDF')
+  // Narrowing to PDF, otherwise the page type stays generic and has no dictionary.
   const doc: mupdf.PDFDocument = opened
   const contents = doc.loadPage(0).getObject().get('Contents')
   const streams = contents.isArray()
@@ -47,12 +47,12 @@ const contentsOf = (bytes: Uint8Array): string => {
 beforeAll(async () => {
   server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'silent' })
   await server.listen()
-  // Браузер системный: скачанные Playwright сборки Chromium отстают от версии пакета.
+  // The system browser: Chromium builds downloaded by Playwright lag behind the package version.
   browser = await chromium.launch({ channel: 'chrome', headless: true })
   page = await browser.newPage({ acceptDownloads: true })
   const url = server.resolvedUrls?.local[0]
-  if (url === undefined) throw new Error('сервер не отдал адрес')
-  // networkidle не наступит: сервер держит соединение горячей перезагрузки.
+  if (url === undefined) throw new Error('server gave no address')
+  // networkidle never comes: the server holds the hot-reload connection open.
   await page.goto(url, { waitUntil: 'domcontentloaded' })
 }, 60_000)
 
@@ -61,16 +61,16 @@ afterAll(async () => {
   await server?.close()
 })
 
-describe('интерфейс в браузере', () => {
-  it('чужой файл остаётся на пустом экране с объяснением', async () => {
-    await drop('notes.pdf', new TextEncoder().encode('не pdf'))
+describe('interface in the browser', () => {
+  it('a foreign file stays on the empty screen with an explanation', async () => {
+    await drop('notes.pdf', new TextEncoder().encode('not pdf'))
     await page.getByText('not a pdf, try another').waitFor()
   })
 
-  it('брошюра по умолчанию: шестнадцать полос дают восемь листов в порядке сшивки', async () => {
+  it('default booklet: sixteen pages give eight sheets in stitching order', async () => {
     await drop('zine.pdf', makeNumberedPdf({ pageCount: 16, ...A5 }))
     await button('export').waitFor()
-    // Счётчик идёт по сторонам: 16 полос брошюры — 4 листа по две стороны, 8 сторон.
+    // The counter goes by side: 16 booklet pages are 4 sheets of two sides, 8 sides.
     expect(await page.getByText('1 / 8').count()).toBe(1)
     await page.keyboard.press('ArrowRight')
     await page.getByText('2 / 8').waitFor()
@@ -80,23 +80,23 @@ describe('интерфейс в браузере', () => {
     const sheets = readBack(await exported())
     expect(sheets).toHaveLength(8)
     const first = sheets[0]
-    if (first === undefined) throw new Error('нет листа')
+    if (first === undefined) throw new Error('no sheet')
     expect(cellOf(first, 1, 2, 'bottom-P16')).toEqual({ row: 0, col: 0 })
     expect(cellOf(first, 1, 2, 'bottom-P1')).toEqual({ row: 0, col: 1 })
   }, 60_000)
 
-  it('смена схемы на n-up меняет и превью, и файл', async () => {
+  it('switching the scheme to n-up changes both the preview and the file', async () => {
     await button('n-up').click()
     await page.getByText('1 / 4').waitFor()
     const sheets = readBack(await exported())
     expect(sheets).toHaveLength(4)
     const second = sheets[1]
-    if (second === undefined) throw new Error('нет листа')
+    if (second === undefined) throw new Error('no sheet')
     expect(cellOf(second, 2, 2, 'bottom-P5')).toEqual({ row: 0, col: 0 })
   }, 60_000)
 
-  it('файл со своими метками реза включает метки и рисует их числами файла', async () => {
-    // Метки InDesign по умолчанию: отступ 6 pt, штрих 15 pt, перо 0.25 pt, подложка 1.25 pt.
+  it('a file with its own crop marks turns marks on and draws them with its numbers', async () => {
+    // InDesign defaults: offset 6 pt, line 15 pt, stroke weight 0.25 pt, white underlay 1.25 pt.
     await drop(
       'indesign.pdf',
       makeNumberedPdf({
@@ -115,7 +115,7 @@ describe('интерфейс в браузере', () => {
     expect(ops).toContain('1.25 w')
   }, 60_000)
 
-  it('поле вручную уже меток файла даёт предупреждение', async () => {
+  it('a manual margin narrower than the file marks gives a warning', async () => {
     await page.getByLabel('margin', { exact: true }).fill('6')
     await page.getByText('marks don’t fit in the margin').waitFor()
   }, 60_000)

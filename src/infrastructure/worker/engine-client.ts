@@ -15,9 +15,9 @@ const describe = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause)
 
 /**
- * Держит поток с движком и переживает его смерть. Каждый вызов, оставшийся без ответа
- * к моменту отмены или падения, получает отказ-значение, а не вечное ожидание:
- * Comlink сам о пропавшем потоке не узнаёт.
+ * Holds the engine worker and survives its death. Every call still unanswered at the moment
+ * of a cancel or crash gets a failure value rather than an endless wait: Comlink on its own
+ * never learns that the worker is gone.
  */
 export const createWorkerEngine = (spawn: () => Worker): EnginePort => {
   let live: Live | null = null
@@ -61,8 +61,8 @@ export const createWorkerEngine = (spawn: () => Worker): EnginePort => {
       api
         .then(run)
         .then(resolve, (cause: unknown) => {
-          // Исключение из потока — нарушение инварианта в адаптере или нехватка
-          // памяти в wasm. Состояние движка после такого не гарантировано.
+          // An exception from the worker means a broken invariant in an adapter or wasm
+          // running out of memory. The engine state after that is not guaranteed.
           stop({ kind: 'Crashed', message: describe(cause) })
           resolve(err({ kind: 'Crashed', message: describe(cause) }))
         })

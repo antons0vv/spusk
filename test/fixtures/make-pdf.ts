@@ -1,4 +1,4 @@
-/** Отступы CropBox внутрь от MediaBox, по каждой стороне отдельно. */
+/** CropBox offsets inward from the MediaBox, for each edge separately. */
 export type CropInsets = {
   readonly left: number
   readonly bottom: number
@@ -10,28 +10,28 @@ export type Options = {
   readonly pageCount: number
   readonly width: number
   readonly height: number
-  /** Вылет со всех сторон. MediaBox станет больше TrimBox на эту величину. */
+  /** Bleed on all sides. The MediaBox becomes larger than the TrimBox by this amount. */
   readonly bleed?: number
-  /** Объявить BleedBox на эту величину вокруг TrimBox. Работает вместе с `bleed`. */
+  /** Declare a BleedBox this far around the TrimBox. Works together with `bleed`. */
   readonly bleedBox?: number
-  /** Сдвиг начала координат MediaBox (и содержимого вместе с ним) по x и y. */
+  /** Shift of the MediaBox origin (and the content along with it) in x and y. */
   readonly origin?: number
-  /** Поворот страницы (/Rotate), градусы по часовой стрелке: 90, 180 или 270. */
+  /** Page rotation (/Rotate), degrees clockwise: 90, 180 or 270. */
   readonly rotate?: number
   /**
-   * CropBox уже MediaBox на эти отступы. В отрезанной полосе рисуется метка
-   * `outside-P*`: на готовый лист она попасть не должна.
+   * CropBox narrower than the MediaBox by these offsets. A cropped page gets the label
+   * `outside-P*` drawn: it must not reach the finished sheet.
    */
   readonly crop?: CropInsets
-  /** Отдать содержимое массивом из двух потоков вместо одного. */
+  /** Emit the content as an array of two streams instead of one. */
   readonly splitContents?: boolean
-  /** Номера полос (с нуля), у которых не будет ключа /Contents вовсе. */
+  /** Indices of pages (zero-based) that get no /Contents key at all. */
   readonly withoutContents?: readonly number[]
-  /** Объявить полосам группу прозрачности. */
+  /** Declare a transparency group on the pages. */
   readonly transparencyGroup?: boolean
   /**
-   * Метки реза в поле за TrimBox, как их рисует InDesign: у каждого угла два штриха на
-   * продолжении линий реза, под каждым белая подложка. Поле задаёт `bleed`.
+   * Crop marks in the margin beyond the TrimBox, the way InDesign draws them: two strokes at each
+   * corner continuing the trim lines, a white underlay under each. The margin comes from `bleed`.
    */
   readonly cropMarks?: {
     readonly offset: number
@@ -43,13 +43,13 @@ export type Options = {
 
 const encoder = new TextEncoder()
 
-/** Основное содержимое полосы: подложка и крупная метка в центре. */
+/** Main content of the page: a background and a large label in the center. */
 const bodyOf = (label: string, w: number, h: number, off: number): readonly string[] => [
   `q 0.85 0.85 0.85 rg ${off} ${off} ${w} ${h} re f Q`,
   `BT /F1 48 Tf 1 0 0 1 ${off + w / 2 - 40} ${off + h / 2 - 20} Tm 0 0 0 rg (${label}) Tj ET`,
 ]
 
-/** Угловые метки: по ним обратный разбор понимает, где у полосы низ и верх. */
+/** Corner labels: from them the read-back tells where the page's bottom and top are. */
 const cornersOf = (
   label: string,
   h: number,
@@ -60,15 +60,16 @@ const cornersOf = (
 ): readonly string[] => [
   `BT /F1 14 Tf 1 0 0 1 ${off + 12} ${off + 12} Tm (bottom-${label}) Tj ET`,
   `BT /F1 14 Tf 1 0 0 1 ${off + 12} ${off + h - 24} Tm (top-${label}) Tj ET`,
-  // Метка в области вылета: лежит за линией реза (TrimBox) и не должна попасть на готовый лист.
+  // A label in the bleed area: it lies beyond the trim line (TrimBox) and must not reach the
+  // finished sheet.
   bleed > 0 ? `BT /F1 8 Tf 1 0 0 1 ${off + 12} ${off - bleed / 2} Tm (bleed-${label}) Tj ET` : '',
-  // Метка за кропбоксом: её прячет сам кропбокс, на готовый лист она не идёт.
+  // A label beyond the CropBox: the CropBox itself hides it, it doesn't go onto the finished sheet.
   crop !== undefined
     ? `BT /F1 6 Tf 1 0 0 1 ${origin + 1} ${origin + 1} Tm (outside-${label}) Tj ET`
     : '',
 ]
 
-/** Штрихи меток реза вокруг полосы; штрих обрезается краем MediaBox, как у InDesign. */
+/** Crop mark strokes around the page; a stroke is clipped by the MediaBox edge, as in InDesign. */
 const cropMarksOf = (
   marks: NonNullable<Options['cropMarks']>,
   off: number,
@@ -113,7 +114,7 @@ const cropMarksOf = (
   ]
 }
 
-/** Собирает PDF вручную, без зависимостей: полосы пронумерованы P1, P2, ... */
+/** Builds a PDF by hand, without dependencies: pages are numbered P1, P2, ... */
 export const makeNumberedPdf = (options: Options): Uint8Array => {
   const bleed = options.bleed ?? 0
   const origin = options.origin ?? 0
@@ -137,8 +138,9 @@ export const makeNumberedPdf = (options: Options): Uint8Array => {
     emit(num, `<< /Length ${encoder.encode(text).length} >>\nstream\n${text}\nendstream`)
   }
 
-  // Номера объектов раздаются заранее: каталог и дерево полос идут первыми, чтобы
-  // обрезанный файл всё ещё чинился движком, а ссылки на полосы были известны раньше их тел.
+  // Object numbers are handed out in advance: the catalog and the page tree go first so that a
+  // truncated file can still be repaired by the engine, and page references are known before
+  // their bodies.
   let lastNum = 3
   const layout = Array.from({ length: options.pageCount }, (_, i) => {
     const streamCount = withoutContents.includes(i) ? 0 : options.splitContents ? 2 : 1
@@ -210,7 +212,7 @@ export const makeNumberedPdf = (options: Options): Uint8Array => {
         : spot.streams.length === 1
           ? ` /Contents ${spot.streams[0]} 0 R`
           : ` /Contents [${spot.streams.map((n) => `${n} 0 R`).join(' ')}]`
-    // Полоса без содержимого остаётся и без ресурсов: так её отдают текстовые редакторы.
+    // A page without content is left without resources too: that's how text editors emit it.
     const resources = spot.streams.length === 0 ? '' : ' /Resources << /Font << /F1 3 0 R >> >>'
 
     emit(

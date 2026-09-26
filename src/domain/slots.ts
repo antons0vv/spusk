@@ -5,10 +5,10 @@ export const BLANK: Slot = { kind: 'blank' }
 
 export type SheetSide = 'front' | 'back' | 'single'
 
-/** Одна сторона одного листа: слоты в порядке ячеек сетки. */
+/** One side of one sheet: slots in grid cell order. */
 export type Side = {
   readonly slots: readonly Slot[]
   readonly side: SheetSide
-  /** Индекс стороны внутри своей тетради, нужен для расчёта выползания. */
+  /** Index of the side within its signature, needed to compute creep. */
   readonly folioSideIndex: number
 }

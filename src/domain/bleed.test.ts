@@ -18,26 +18,26 @@ const doc = (pages: readonly SourcePage[]): DocumentInfo => ({
   cropMarks: null,
 })
 
-describe('вылет из файла', () => {
-  it('равен запасу от линии реза до BleedBox', () => {
+describe('bleed from the file', () => {
+  it('equals the distance from the trim line to the BleedBox', () => {
     expect(fileBleed(doc([page(rect(11.5, 11.5, 217, 317))]))).toBeCloseTo(8.5, 6)
   })
 
-  it('берётся по самой узкой стороне: несимметричный вылет не должен вылезти белым', () => {
+  it('is taken from the narrowest side: asymmetric bleed must not show white', () => {
     expect(fileBleed(doc([page(rect(11.5, 17, 214, 311.5))]))).toBeCloseTo(3, 6)
   })
 
-  it('берётся по самой бедной полосе документа', () => {
+  it('is taken from the page with the least bleed in the document', () => {
     const wide = page(rect(11.5, 11.5, 217, 317))
     const narrow = page(rect(17, 17, 206, 306))
     expect(fileBleed(doc([wide, narrow, wide]))).toBeCloseTo(3, 6)
   })
 
-  it('полоса без BleedBox обнуляет вылет документа', () => {
+  it('a page without a BleedBox zeroes the document bleed', () => {
     expect(fileBleed(doc([page(rect(11.5, 11.5, 217, 317)), page(null)]))).toBe(pt(0))
   })
 
-  it('BleedBox внутри линии реза не даёт отрицательного вылета', () => {
+  it('a BleedBox inside the trim line does not give negative bleed', () => {
     expect(fileBleed(doc([page(rect(25, 25, 190, 290))]))).toBe(pt(0))
   })
 })

@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "spusk",
   "compatibility_date": "2026-09-25",
-  // Сервера нет: воркер только раздаёт собранный dist.
+  // There is no server: the worker only serves the built dist.
   "assets": { "directory": "./dist" },
   "routes": [{ "pattern": "tools.volnenko.com", "custom_domain": true }]
 }

@@ -22,28 +22,28 @@ import { mm, pt, toMm } from '../domain/units.js'
 export type SchemeKind = Scheme['kind']
 
 /**
- * Параметры задания в том виде, в каком их крутит человек: миллиметры, названия
- * форматов, флажки меток. В `Job` они превращаются только в `resolve`.
+ * Job parameters in the form a person tweaks them: millimeters, format names, mark
+ * checkboxes. They turn into a `Job` only in `resolve`.
  */
 export type Settings = {
   readonly scheme: SchemeKind
   readonly folio: number | 'all'
   readonly binding: Binding
   readonly creepMm: number
-  /** Сетка общая для n-up, step and repeat и cut and stack: смена схемы её не сбрасывает. */
+  /** The grid is shared by n-up, step and repeat and cut and stack: switching schemes keeps it. */
   readonly rows: number
   readonly cols: number
   readonly fill: 'rows' | 'cols'
   readonly copies: number
-  /** `custom` — лист ровно `customWMm × customHMm`, ориентация следует из сторон. */
+  /** `custom` is a sheet of exactly `customWMm × customHMm`; orientation follows from its sides. */
   readonly format: FormatName | 'auto' | 'custom'
   readonly orientation: Orientation
   readonly customWMm: number
   readonly customHMm: number
-  /** `auto` — ровно столько, сколько нужно вылету и включённым меткам. */
+  /** `auto` is exactly as much as the bleed and the enabled marks need. */
   readonly marginMm: number | 'auto'
   readonly gapMm: number
-  /** `auto` — вылет, объявленный в файле (BleedBox); без него ноль. */
+  /** `auto` is the bleed declared in the file (BleedBox); without one, zero. */
   readonly bleedMm: number | 'auto'
   readonly normalizeSizes: boolean
   readonly marks: { readonly crop: boolean; readonly fold: boolean; readonly registration: boolean }
@@ -70,11 +70,12 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 /**
- * Геометрия меток в интерфейс не выведена: для типографии это привычные величины. Если файл
- * сам нарисовал метки реза, их числа важнее: см. `cropGeometry`.
- * Метки реза целиком помещаются в пять миллиметров поля: отступ два, штрих три. Отступ
- * не меньше вылета, иначе метка ляжет на вылет и напечатается поверх фона; штрих при этом
- * укорачивается, чтобы поле осталось прежним, но не короче двух миллиметров.
+ * Mark geometry isn't exposed in the interface: these are the values print shops are used to.
+ * If the file drew crop marks itself, its numbers win: see `cropGeometry`.
+ * Crop marks fit entirely into five millimeters of margin: offset two, stroke three. The offset
+ * is never less than the bleed, or the mark would land on the bleed and print over the
+ * background; the line then gets shorter so the margin stays the same, but never shorter than
+ * two millimeters.
  */
 const CROP_REACH_MM = 5
 const CROP_OFFSET_MM = 2
@@ -100,9 +101,9 @@ const schemeOf = (s: Settings): Scheme => {
 }
 
 /**
- * Метки реза рисуются числами файла, если он нарисовал их сам: так лист повторяет то, что
- * человек видел в своей программе вёрстки. Отступ меньше вылета при этом не растёт — метку
- * от фона вылета отбивает белая подложка из того же файла.
+ * Crop marks are drawn with the file's numbers if the file drew them itself: that way the sheet
+ * repeats what the person saw in their layout program. An offset smaller than the bleed is not
+ * grown then: the white underlay from the same file sets the mark off the bleed background.
  */
 const cropGeometry = (bleedMm: number, file: CropGeometry | null): CropGeometry =>
   file ?? {
@@ -120,7 +121,7 @@ const marksOf = (s: Settings, bleedMm: number, file: CropGeometry | null): reado
   return marks
 }
 
-/** Поле, в которое помещаются вылет и все включённые метки. */
+/** The margin that fits the bleed and all enabled marks. */
 export const neededMarginMm = (
   s: Settings,
   bleedMm: number = s.bleedMm === 'auto' ? 0 : s.bleedMm,
@@ -159,7 +160,7 @@ const sheetOf = (s: Settings, draft: Job, doc: DocumentInfo): ResolvedSheet => {
   }
 }
 
-/** Вылет файла в миллиметрах с точностью до десятой: столько показывает интерфейс. */
+/** The file's bleed in millimeters, to a tenth: as precise as the interface shows it. */
 const fileBleedMm = (doc: DocumentInfo): number => Math.round(toMm(fileBleed(doc)) * 10) / 10
 
 export type Resolved = {
@@ -167,15 +168,16 @@ export type Resolved = {
   readonly sheet: ResolvedSheet
   readonly marginMm: number
   readonly bleedMm: number
-  /** Масштаб самой большой полосы: 1, если полосы влезли как есть. */
+  /** Scale of the largest page: 1 if the pages fit as they are. */
   readonly scale: number
   readonly plan: Result<Plan, PlanError>
 }
 
 /**
- * Собирает задание и план. Лист при `auto` подбирается под документ и схему, поле при
- * `auto` — под вылет и метки. Если полосы не влезают на лист в натуральную величину,
- * они вписываются: спрашивать человека не о чем, а масштаб показывается рядом.
+ * Builds the job and the plan. With `auto`, the sheet is picked for the document and the
+ * scheme, and the margin for the bleed and the marks. If the pages don't fit on the sheet at
+ * actual size, they are scaled to fit: there is nothing to ask the person, and the scale is
+ * shown alongside.
  */
 export const resolve = (s: Settings, doc: DocumentInfo): Resolved => {
   const bleedMm = s.bleedMm === 'auto' ? fileBleedMm(doc) : s.bleedMm

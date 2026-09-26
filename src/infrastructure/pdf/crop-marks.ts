@@ -2,19 +2,19 @@ import type { Point, Rect } from '../../domain/geometry.js'
 import type { CropGeometry } from '../../domain/marks.js'
 import { pt } from '../../domain/units.js'
 
-/** Обведённый отрезок в пространстве PDF: начало внизу слева, ось Y вверх. */
+/** A stroked segment in PDF space: origin at bottom left, Y axis up. */
 export type Stroke = { readonly from: Point; readonly to: Point; readonly width: number }
 
-/** Допуск на совпадение с линией реза: генераторы PDF округляют координаты по-своему. */
+/** Tolerance for matching a trim line: PDF generators each round coordinates their own way. */
 const ALIGN = 0.1
-/** Насколько могут расходиться отступы и длины штрихов одного набора меток. */
+/** How far the offsets and lengths of strokes in one set of marks may differ. */
 const SAME = 0.5
 
 type Found = { readonly offset: number; readonly length: number; readonly width: number }
 
 /**
- * Штрих метки реза лежит на продолжении линии реза целиком за полосой. Ключ говорит,
- * у какого угла он стоит и куда направлен: у каждого угла их два.
+ * A crop mark stroke lies on the extension of a trim line, entirely outside the page. The key
+ * says which corner it stands at and which way it points: each corner has two.
  */
 const asMark = (s: Stroke, trim: Rect): { readonly key: string; readonly found: Found } | null => {
   const left = trim.x
@@ -58,9 +58,9 @@ const spread = (values: readonly number[]) => Math.max(...values) - Math.min(...
 const mean = (values: readonly number[]) => values.reduce((a, b) => a + b, 0) / values.length
 
 /**
- * Метки реза, которые файл нарисовал сам. Считаются метками, только если у всех четырёх
- * углов есть оба штриха и отступы с длинами у них одни. Штрих — самая тонкая линия на своём
- * месте; более толстая на том же месте — белая подложка, так их кладёт InDesign.
+ * Crop marks the file drew itself. They count as marks only if all four corners have both
+ * strokes and these share the same offsets and lengths. The stroke is the thinnest line in its
+ * place; a thicker one in the same place is the white underlay, which is how InDesign lays them.
  */
 export const cropMarksFrom = (strokes: readonly Stroke[], trim: Rect): CropGeometry | null => {
   const byKey = new Map<string, Found[]>()

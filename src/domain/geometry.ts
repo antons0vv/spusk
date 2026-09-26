@@ -4,7 +4,7 @@ export type Size = { readonly w: Pt; readonly h: Pt }
 export type Point = { readonly x: Pt; readonly y: Pt }
 export type Rect = { readonly x: Pt; readonly y: Pt; readonly w: Pt; readonly h: Pt }
 
-/** Матрица PDF: [a b c d e f]. */
+/** PDF matrix: [a b c d e f]. */
 export type Matrix = readonly [number, number, number, number, Pt, Pt]
 
 export const size = (w: number, h: number): Size => ({ w: pt(w), h: pt(h) })
@@ -20,7 +20,7 @@ export const IDENTITY: Matrix = [1, 0, 0, 1, pt(0), pt(0)]
 export const translation = (dx: Pt, dy: Pt): Matrix => [1, 0, 0, 1, dx, dy]
 export const scaling = (s: number): Matrix => [s, 0, 0, s, pt(0), pt(0)]
 
-/** Композиция: сначала a, потом b. */
+/** Composition: a first, then b. */
 export const compose = (a: Matrix, b: Matrix): Matrix => [
   a[0] * b[0] + a[1] * b[2],
   a[0] * b[1] + a[1] * b[3],

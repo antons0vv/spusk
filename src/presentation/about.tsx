@@ -1,5 +1,5 @@
 type Link = { readonly text: string; readonly href: string }
-/** Строка: подпись, одна или несколько ссылок и серая приписка. */
+/** A line: a label, one or more links and a gray note. */
 type Line = { readonly label: string; readonly links: readonly Link[]; readonly note?: string }
 
 const one = (label: string, text: string, href: string): Line => ({
@@ -7,7 +7,7 @@ const one = (label: string, text: string, href: string): Line => ({
   links: [{ text, href }],
 })
 
-/** Автор и контакты. Ссылка на исходники обязательна: AGPL требует её у размещённой копии. */
+/** Author and contacts. The source link is required: the AGPL demands it of a hosted copy. */
 const AUTHOR: readonly Line[] = [
   one('author', 'Anton Volnenko', 'https://github.com/antons0vv'),
   one('email', 'antons0vv@gmail.com', 'mailto:antons0vv@gmail.com'),
@@ -22,7 +22,7 @@ const AUTHOR: readonly Line[] = [
   one('source', 'github.com/antons0vv/spusk', 'https://github.com/antons0vv/spusk'),
 ]
 
-/** Чужой код и шрифт, чьи лицензии просят упоминания. */
+/** Third-party code and typeface whose licenses ask for a mention. */
 const CREDITS: readonly Line[] = [
   one('license', 'AGPL-3.0-or-later', 'https://www.gnu.org/licenses/agpl-3.0.html'),
   one('engine', 'MuPDF by Artifex Software', 'https://mupdf.com'),
@@ -53,7 +53,10 @@ const Lines = ({ lines }: { lines: readonly Line[] }) => (
   </div>
 )
 
-/** Что это и чьё: на пустом экране стоит в боковой колонке, на рабочем открывается по «about». */
+/**
+ * What this is and whose: on the empty screen it sits in the sidebar, on the work screen it
+ * opens via "about".
+ */
 export const About = () => (
   <div className="flex flex-col gap-y-[1lh]">
     <div>

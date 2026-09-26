@@ -9,11 +9,11 @@ import { WorkScreen } from './work-screen.js'
 
 const isFileDrag = (e: DragEvent) => e.dataTransfer?.types.includes('Files') ?? false
 
-/** Всё окно принимает файл на любом экране: второй PDF заменяет первый. */
+/** The whole window takes a file on any screen: a second PDF replaces the first. */
 const useFileDrop = (onFile: (file: File) => void) => {
   const [dragging, setDragging] = useState(false)
   useEffect(() => {
-    // dragenter и dragleave приходят парами на каждый вложенный элемент.
+    // dragenter and dragleave arrive in pairs for every nested element.
     let depth = 0
     const enter = (e: DragEvent) => {
       if (!isFileDrag(e)) return
@@ -53,8 +53,8 @@ const useFileDrop = (onFile: (file: File) => void) => {
 const aboutInUrl = () => window.location.hash === '#about'
 
 /**
- * Страница «о проекте» открывается по #about, чтобы на неё можно было дать ссылку.
- * Кнопка «назад» в браузере её закрывает: pushState не шлёт hashchange, отсюда popstate.
+ * The "about" page opens at #about so that it can be linked to.
+ * The browser's back button closes it: pushState doesn't fire hashchange, hence popstate.
  */
 const useAbout = (): [boolean, (open: boolean) => void] => {
   const [open, setOpen] = useState(aboutInUrl)
@@ -68,7 +68,7 @@ const useAbout = (): [boolean, (open: boolean) => void] => {
     }
   }, [])
   const set = useCallback((next: boolean) => {
-    // Без решётки в адресе: иначе закрытая страница оставляла бы «#» в строке браузера.
+    // No hash in the address: otherwise a closed page would leave "#" in the browser's address bar.
     const url = next ? '#about' : window.location.pathname + window.location.search
     window.history.pushState(null, '', url)
     setOpen(next)
@@ -118,7 +118,7 @@ export const App = ({ app }: { app: AppStore }) => {
           dragging={dragging}
         />
       ) : (
-        // На пустом экране «о проекте» стоит в колонке всегда: делать тут больше нечего.
+        // On the empty screen "about" always sits in the sidebar: there's nothing else to do here.
         <Shell sidebar={<About />}>
           <DropScreen
             screen={state.screen}

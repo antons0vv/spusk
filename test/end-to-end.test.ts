@@ -14,11 +14,11 @@ const writer = new MupdfWriter(reader)
 
 const run = (source: Uint8Array, job: Job): Uint8Array => {
   const opened = reader.open(source)
-  if (!isOk(opened)) throw new Error('документ не открылся')
+  if (!isOk(opened)) throw new Error('document did not open')
   const built = plan(job, opened.value.info)
-  if (!isOk(built)) throw new Error(`план не построен: ${JSON.stringify(built.error)}`)
+  if (!isOk(built)) throw new Error(`plan not built: ${JSON.stringify(built.error)}`)
   const written = writer.write(opened.value.handle, built.value)
-  if (!isOk(written)) throw new Error('файл не записан')
+  if (!isOk(written)) throw new Error('file not written')
   reader.close(opened.value.handle)
   return written.value
 }
@@ -30,18 +30,18 @@ const A5_ON_A4: Job = {
   marks: [],
 }
 
-describe('сквозной путь', () => {
-  it('шестнадцать полос превращаются в восемь листов с правильным порядком', () => {
+describe('end-to-end path', () => {
+  it('sixteen pages turn into eight sheets in the right order', () => {
     const out = run(makeNumberedPdf({ pageCount: 16, width: 419.53, height: 595.28 }), A5_ON_A4)
     const sheets = readBack(out)
     expect(sheets).toHaveLength(8)
     const last = sheets[7]
-    if (last === undefined) throw new Error('нет листа')
+    if (last === undefined) throw new Error('no sheet')
     expect(cellOf(last, 1, 2, 'bottom-P8')).toEqual({ row: 0, col: 0 })
     expect(cellOf(last, 1, 2, 'bottom-P9')).toEqual({ row: 0, col: 1 })
   })
 
-  it('тетради по восемь полос дают отдельные тетради', () => {
+  it('signatures of eight pages come out as separate signatures', () => {
     const job: Job = {
       ...A5_ON_A4,
       scheme: { kind: 'booklet', folio: 8, binding: 'left', creepPerSheet: pt(0) },
@@ -50,27 +50,27 @@ describe('сквозной путь', () => {
       run(makeNumberedPdf({ pageCount: 16, width: 419.53, height: 595.28 }), job),
     )
     const fifth = sheets[4]
-    if (fifth === undefined) throw new Error('нет листа')
+    if (fifth === undefined) throw new Error('no sheet')
     expect(cellOf(fifth, 1, 2, 'bottom-P16')).toEqual({ row: 0, col: 0 })
     expect(cellOf(fifth, 1, 2, 'bottom-P9')).toEqual({ row: 0, col: 1 })
   })
 
-  it('выползание реально сдвигает содержимое внутренних листов', () => {
+  it('creep really shifts the content of the inner sheets', () => {
     const out = run(makeNumberedPdf({ pageCount: 16, width: 419.53, height: 595.28 }), A5_ON_A4)
     const sheets = readBack(out)
     const outerLabel = sheets[0]?.labels.find((l) => l.text.includes('bottom-P16'))
     const innerLabel = sheets[6]?.labels.find((l) => l.text.includes('bottom-P10'))
-    if (outerLabel === undefined || innerLabel === undefined) throw new Error('нет меток')
+    if (outerLabel === undefined || innerLabel === undefined) throw new Error('no labels')
     expect(innerLabel.x - outerLabel.x).toBeCloseTo(mm(1.2), 1)
   })
 
-  it('результат не раздувается: общие ресурсы переносятся один раз', () => {
+  it('the output does not bloat: shared resources are carried over once', () => {
     const source = makeNumberedPdf({ pageCount: 32, width: 419.53, height: 595.28 })
     const out = run(source, A5_ON_A4)
     expect(out.byteLength).toBeLessThan(source.byteLength * 2)
   })
 
-  it('вылет обрезается: метка за линией реза на лист не попадает', () => {
+  it('bleed is trimmed: a label beyond the trim line does not reach the sheet', () => {
     const source = makeNumberedPdf({ pageCount: 4, width: 200, height: 300, bleed: 10 })
     const job: Job = {
       ...A5_ON_A4,
@@ -78,13 +78,13 @@ describe('сквозной путь', () => {
       source: { bleed: pt(0), scaling: 'actual', normalizeSizes: false },
     }
     const first = readBack(run(source, job))[0]
-    if (first === undefined) throw new Error('нет листа')
-    // Метка внутри линии реза остаётся, метка за ней обрезается.
+    if (first === undefined) throw new Error('no sheet')
+    // A label inside the trim line stays, a label beyond it is trimmed off.
     expect(first.labels.some((l) => l.text.startsWith('bottom-P'))).toBe(true)
     expect(first.labels.some((l) => l.text.startsWith('bleed-P'))).toBe(false)
   })
 
-  it('одна полоса во множестве копий не размножает своё содержимое', () => {
+  it('a single page in many copies does not multiply its content', () => {
     const source = makeNumberedPdf({ pageCount: 1, width: 241, height: 155 })
     const job: Job = {
       ...A5_ON_A4,
@@ -94,13 +94,13 @@ describe('сквозной путь', () => {
       marks: [],
     }
     const out = run(source, job)
-    // Сорок копий на четырёх листах: форма строится один раз и переиспользуется,
-    // поэтому результат обязан остаться того же порядка, что и исходник.
+    // Forty copies on four sheets: the form is built once and reused,
+    // so the output must stay of the same order as the source.
     expect(readBack(out)).toHaveLength(4)
     expect(out.byteLength).toBeLessThan(source.byteLength * 3)
   })
 
-  it('step and repeat печатает нужное число копий', () => {
+  it('step and repeat prints the requested number of copies', () => {
     const job: Job = {
       ...A5_ON_A4,
       scheme: { kind: 'stepRepeat', rows: 5, cols: 2, copies: 10 },

@@ -7,7 +7,7 @@ const cellIndexFor = (k: number, rows: number, cols: number, fill: 'rows' | 'col
   return row * cols + col
 }
 
-/** Раскладывает полосы по сетке в естественном порядке, по одному разу каждую. */
+/** Lays pages out on the grid in natural order, each one once. */
 export const nupOrder = (
   pageCount: number,
   rows: number,

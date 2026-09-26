@@ -18,7 +18,7 @@ const docOf = (wMm: number, hMm: number, pageCount = 16): DocumentInfo => ({
 })
 
 const a5 = docOf(148, 210)
-/** Метки реза, какими их кладёт InDesign по умолчанию. */
+/** Crop marks as InDesign places them by default. */
 const INDESIGN: CropGeometry = {
   offset: mm(2.117),
   length: mm(5.29),
@@ -33,8 +33,8 @@ const marks = (on: Partial<Settings['marks']>): Settings['marks'] => ({
   ...on,
 })
 
-describe('задание из параметров', () => {
-  it('по умолчанию брошюра из A5 сразу строится на альбомном A4 в натуральную величину', () => {
+describe('job from settings', () => {
+  it('by default an A5 booklet builds right away on landscape A4 at actual size', () => {
     const r = resolve(DEFAULT_SETTINGS, a5)
     expect(r.sheet).toMatchObject({ format: 'a4', orientation: 'landscape' })
     expect(r.plan.ok).toBe(true)
@@ -42,20 +42,20 @@ describe('задание из параметров', () => {
     expect(r.marginMm).toBe(0)
   })
 
-  it('миллиметры переводятся в пункты', () => {
+  it('millimeters are converted to points', () => {
     const { job } = resolve({ ...DEFAULT_SETTINGS, marginMm: 10, gapMm: 4, bleedMm: 3 }, a5)
     expect(toMm(job.sheet.margin)).toBeCloseTo(10, 6)
     expect(toMm(job.sheet.gap)).toBeCloseTo(4, 6)
     expect(toMm(job.source.bleed)).toBeCloseTo(3, 6)
   })
 
-  it('явный формат с ориентацией не подбирается', () => {
+  it('an explicit format with an orientation is not auto-picked', () => {
     const { sheet } = resolve({ ...DEFAULT_SETTINGS, format: 'sra3', orientation: 'portrait' }, a5)
     expect(sheet.format).toBe('sra3')
     expect(toMm(sheet.size.w)).toBeCloseTo(320, 6)
   })
 
-  it('сетка переходит между схемами, метки собираются по флажкам', () => {
+  it('the grid carries over between schemes, marks are collected from the checkboxes', () => {
     const { job } = resolve(
       {
         ...DEFAULT_SETTINGS,
@@ -71,57 +71,57 @@ describe('задание из параметров', () => {
   })
 })
 
-describe('поле auto', () => {
-  it('без меток и вылета поля нет, вылету поле нужно ровно под вылет', () => {
+describe('auto margin', () => {
+  it('no marks and no bleed means no margin, bleed needs a margin exactly its width', () => {
     expect(neededMarginMm(DEFAULT_SETTINGS)).toBe(0)
     expect(neededMarginMm({ ...DEFAULT_SETTINGS, bleedMm: 3 })).toBe(3)
   })
 
-  it('метки реза умещаются в пять миллиметров поля', () => {
+  it('crop marks fit into five millimeters of margin', () => {
     expect(neededMarginMm({ ...DEFAULT_SETTINGS, marks: marks({ crop: true }) })).toBe(5)
   })
 
-  it('при вылете до трёх миллиметров поле под метки остаётся пять: штрих укорачивается', () => {
+  it('with bleed up to 3 mm the margin for marks stays 5 mm: the line gets shorter', () => {
     const s: Settings = { ...DEFAULT_SETTINGS, bleedMm: 3, marks: marks({ crop: true }) }
     expect(neededMarginMm(s)).toBe(5)
     const crop = resolve(s, a5).job.marks[0]
-    if (crop?.kind !== 'crop') throw new Error('нет метки реза')
+    if (crop?.kind !== 'crop') throw new Error('no crop mark')
     expect(toMm(crop.offset)).toBeCloseTo(3, 6)
     expect(toMm(crop.length)).toBeCloseTo(2, 6)
   })
 
-  it('отступ метки реза растёт вместе с вылетом, чтобы метка не легла на вылет', () => {
+  it('the crop mark offset grows with the bleed so the mark stays off the bleed', () => {
     const s: Settings = { ...DEFAULT_SETTINGS, bleedMm: 5, marks: marks({ crop: true }) }
-    // Короче двух миллиметров штрих не делается: резчик его не увидит.
+    // The line is never made shorter than two millimeters: the cutter wouldn't see it.
     expect(neededMarginMm(s)).toBe(7)
     const crop = resolve(s, a5).job.marks[0]
-    if (crop?.kind !== 'crop') throw new Error('нет метки реза')
+    if (crop?.kind !== 'crop') throw new Error('no crop mark')
     expect(toMm(crop.offset)).toBeCloseTo(5, 6)
   })
 
-  it('метки фальцовки просят поле только у брошюры: в других схемах их нет', () => {
+  it('fold marks ask for a margin only in a booklet: other schemes have none', () => {
     const fold = marks({ fold: true })
     expect(neededMarginMm({ ...DEFAULT_SETTINGS, marks: fold })).toBe(5)
     expect(neededMarginMm({ ...DEFAULT_SETTINGS, scheme: 'nup', marks: fold })).toBe(0)
   })
 
-  it('метки приводки получают поле, в котором домен их действительно ставит', () => {
+  it('registration marks get a margin in which the domain actually places them', () => {
     const s: Settings = { ...DEFAULT_SETTINGS, marks: marks({ registration: true }) }
     const r = resolve(s, a5)
-    if (!r.plan.ok) throw new Error('план не построен')
+    if (!r.plan.ok) throw new Error('plan not built')
     const kinds = r.plan.value.sheets[0]?.marks.map((m) => m.kind)
     expect(kinds).toContain('registration')
   })
 
-  it('поле из auto попадает в задание, заданное вручную — как есть', () => {
+  it('a margin from auto goes into the job, a manually set one goes in as is', () => {
     const on = marks({ crop: true })
     expect(resolve({ ...DEFAULT_SETTINGS, marks: on }, a5).marginMm).toBe(5)
     expect(resolve({ ...DEFAULT_SETTINGS, marks: on, marginMm: 2 }, a5).marginMm).toBe(2)
   })
 })
 
-describe('масштаб', () => {
-  it('брошюра из A4 альбомных не влезает никуда и вписывается в самый большой лист', () => {
+describe('scale', () => {
+  it('a booklet of landscape A4 pages fits nowhere and is scaled to fit the largest sheet', () => {
     const r = resolve(DEFAULT_SETTINGS, docOf(297, 210, 32))
     expect(r.plan.ok).toBe(true)
     expect(r.sheet.format).toBe('sra3')
@@ -129,7 +129,7 @@ describe('масштаб', () => {
     expect(r.scale).toBeCloseTo(450 / 594, 3)
   })
 
-  it('на явно выбранный маленький лист вписывается в него', () => {
+  it('on an explicitly chosen small sheet it is scaled to fit that sheet', () => {
     const r = resolve(
       { ...DEFAULT_SETTINGS, format: 'a4', orientation: 'landscape' },
       docOf(297, 210, 32),
@@ -138,15 +138,15 @@ describe('масштаб', () => {
     expect(r.scale).toBeCloseTo(0.5, 3)
   })
 
-  it('влезающие полосы не масштабируются', () => {
+  it('pages that fit are not scaled', () => {
     const r = resolve({ ...DEFAULT_SETTINGS, format: 'a3', orientation: 'landscape' }, a5)
     expect(r.job.source.scaling).toBe('actual')
     expect(r.scale).toBe(1)
   })
 })
 
-describe('свой формат листа', () => {
-  it('лист ровно заданного размера, ориентация по сторонам', () => {
+describe('custom sheet format', () => {
+  it('the sheet is exactly the given size, orientation follows its sides', () => {
     const r = resolve({ ...DEFAULT_SETTINGS, format: 'custom', customWMm: 296, customHMm: 226 }, a5)
     expect(r.sheet.format).toBe('custom')
     expect(r.sheet.orientation).toBe('landscape')
@@ -155,14 +155,14 @@ describe('свой формат листа', () => {
     expect(r.plan.ok).toBe(true)
   })
 
-  it('на своём листе, где полосы не влезают, они вписываются, как на стандартном', () => {
+  it('pages that do not fit a custom sheet are scaled to fit it, as on a standard one', () => {
     const r = resolve({ ...DEFAULT_SETTINGS, format: 'custom', customWMm: 200, customHMm: 150 }, a5)
     expect(r.scale).toBeLessThan(1)
     expect(r.plan.ok).toBe(true)
   })
 })
 
-describe('вылет auto', () => {
+describe('auto bleed', () => {
   const withBleed = (bleedMm: number): DocumentInfo => {
     const base = docOf(145, 205, 4)
     return {
@@ -180,45 +180,46 @@ describe('вылет auto', () => {
     }
   }
 
-  it('по умолчанию вылет берётся из BleedBox файла', () => {
+  it('by default the bleed is taken from the BleedBox of the file', () => {
     const r = resolve(DEFAULT_SETTINGS, withBleed(3))
     expect(r.bleedMm).toBe(3)
     expect(toMm(r.job.source.bleed)).toBeCloseTo(3, 6)
   })
 
-  it('без BleedBox в файле вылет auto нулевой', () => {
+  it('with no BleedBox in the file, auto bleed is zero', () => {
     expect(resolve(DEFAULT_SETTINGS, a5).bleedMm).toBe(0)
   })
 
-  it('заданный вручную вылет файл не перебивает', () => {
+  it('the file does not override a manually set bleed', () => {
     expect(resolve({ ...DEFAULT_SETTINGS, bleedMm: 1 }, withBleed(3)).bleedMm).toBe(1)
   })
 
-  it('поле auto и отступ меток считаются от вылета файла', () => {
+  it('the auto margin and the mark offset are computed from the file bleed', () => {
     const s: Settings = { ...DEFAULT_SETTINGS, marks: marks({ crop: true }) }
     const r = resolve(s, withBleed(4))
     expect(r.marginMm).toBe(6)
     const crop = r.job.marks[0]
-    if (crop?.kind !== 'crop') throw new Error('нет метки реза')
+    if (crop?.kind !== 'crop') throw new Error('no crop mark')
     expect(toMm(crop.offset)).toBeCloseTo(4, 6)
   })
 
-  it('метки реза из файла рисуются его числами, даже если отступ меньше вылета', () => {
+  it('crop marks from the file keep its numbers, even when the offset is under the bleed', () => {
     const s: Settings = { ...DEFAULT_SETTINGS, marks: marks({ crop: true }) }
     expect(resolve(s, withFileMarks).job.marks).toEqual([{ kind: 'crop', ...INDESIGN }])
-    // Метка InDesign заходит на вылет, от фона её отбивает белая подложка: числа не трогаем.
+    // The InDesign mark reaches into the bleed, the white underlay sets it off the background:
+    // the numbers stay untouched.
     expect(resolve({ ...s, bleedMm: 3 }, withFileMarks).job.marks).toEqual([
       { kind: 'crop', ...INDESIGN },
     ])
   })
 
-  it('поле auto вмещает метки файла целиком: отступ плюс длина', () => {
+  it('the auto margin fits the file marks whole: offset plus length', () => {
     const s: Settings = { ...DEFAULT_SETTINGS, marks: marks({ crop: true }) }
     expect(resolve(s, withFileMarks).marginMm).toBeCloseTo(7.41, 2)
     expect(neededMarginMm(s, 0, INDESIGN)).toBeCloseTo(7.41, 2)
   })
 
-  it('выключенные метки реза не берут у файла ни чисел, ни поля', () => {
+  it('disabled crop marks take neither numbers nor margin from the file', () => {
     const r = resolve(DEFAULT_SETTINGS, withFileMarks)
     expect(r.job.marks).toEqual([])
     expect(r.marginMm).toBe(0)

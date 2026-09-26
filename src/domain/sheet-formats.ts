@@ -8,7 +8,7 @@ import { mm } from './units.js'
 export type FormatName = 'a4' | 'sra4' | 'a3' | 'sra3'
 export type Orientation = 'portrait' | 'landscape'
 
-/** Форматы в книжной ориентации, от меньшего к большему. */
+/** Formats in portrait orientation, from smallest to largest. */
 export const FORMATS: Readonly<Record<FormatName, Size>> = {
   a4: size(mm(210), mm(297)),
   sra4: size(mm(225), mm(320)),
@@ -30,7 +30,7 @@ export type SheetChoice = {
   readonly size: Size
 }
 
-/** Во сколько раз самая большая полоса поместилась бы в ячейку: больше — просторнее. */
+/** How many times over the largest page would fit in a cell: more means roomier. */
 export const roominess = (job: Job, doc: DocumentInfo, sheet: Size): number => {
   const { rows, cols } = gridShapeFor(job.scheme)
   const cell = buildGrid(sheet, rows, cols, job.sheet.margin, job.sheet.gap).cells[0]
@@ -41,11 +41,11 @@ export const roominess = (job: Job, doc: DocumentInfo, sheet: Size): number => {
 }
 
 /**
- * Самый маленький стандартный формат, на котором план строится. Годность решает сам
- * планировщик, а не отдельная проверка: правило «влезает» живёт в одном месте.
- * Из двух годных ориентаций берётся та, где полосе просторнее: книжная полоса
- * ляжет на книжный лист, разворот брошюры — на альбомный. Если не годится ничего,
- * отдаётся самый большой формат, и план сам расскажет почему.
+ * The smallest standard format the plan can be built on. Suitability is decided by the
+ * planner itself, not by a separate check: the “fits” rule lives in one place.
+ * Of two suitable orientations, the one where the page has more room is taken: a portrait
+ * page goes on a portrait sheet, a booklet spread on a landscape one. If nothing is suitable,
+ * the largest format is returned, and the plan itself will say why.
  */
 export const pickSheet = (job: Job, doc: DocumentInfo): SheetChoice => {
   let fallback: SheetChoice | null = null

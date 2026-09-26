@@ -12,8 +12,8 @@ const stroke = (x0: number, y0: number, x1: number, y1: number, width: number): 
 })
 
 /**
- * Метки так, как их кладёт InDesign: у каждого угла вертикальный и горизонтальный штрих
- * по продолжению линий реза, наружу от отступа, под каждым — белая подложка.
+ * Marks as InDesign lays them: at each corner a vertical and a horizontal stroke along the
+ * extensions of the trim lines, running outward from the offset, each with a white underlay.
  */
 const indesign = (
   trim: Rect,
@@ -50,8 +50,8 @@ const indesign = (
   return strokes
 }
 
-describe('метки реза в самом файле', () => {
-  it('штрихи у четырёх углов дают отступ, длину, перо и подложку', () => {
+describe('crop marks in the file itself', () => {
+  it('strokes at four corners give offset, length, stroke weight and underlay', () => {
     const found = cropMarksFrom(indesign(TRIM, 6, 15, 0.25, 1.25), TRIM)
     expect(found?.offset).toBeCloseTo(6, 3)
     expect(found?.length).toBeCloseTo(15, 3)
@@ -59,22 +59,22 @@ describe('метки реза в самом файле', () => {
     expect(found?.halo).toBeCloseTo(1.25, 3)
   })
 
-  it('метки без белой подложки находятся, подложка пустая', () => {
+  it('marks without a white underlay are found, and the underlay is empty', () => {
     const found = cropMarksFrom(indesign(TRIM, 8.5, 12, 0.3, null), TRIM)
     expect(found).not.toBeNull()
     expect(found?.halo).toBeNull()
   })
 
-  it('штрихи только у трёх углов — не метки реза', () => {
+  it('strokes at only three corners are not crop marks', () => {
     expect(cropMarksFrom(indesign(TRIM, 6, 15, 0.25, 1.25, 'topRight'), TRIM)).toBeNull()
   })
 
-  it('рамка и линии, заходящие на полосу, не сбивают и не заменяют метки', () => {
+  it('a frame and lines running onto the page neither confuse nor replace the marks', () => {
     const noise = [
-      // Рамка вокруг полосы в поле, на линиях реза.
+      // A frame around the page in the margin, on the trim lines.
       stroke(0, TRIM.y, 453, TRIM.y, 1),
       stroke(TRIM.x, 0, TRIM.x, 623, 1),
-      // Линия содержимого на самой полосе.
+      // A content line on the page itself.
       stroke(TRIM.x + 20, TRIM.y + 20, TRIM.x + 200, TRIM.y + 20, 0.5),
     ]
     expect(cropMarksFrom(noise, TRIM)).toBeNull()
@@ -83,7 +83,7 @@ describe('метки реза в самом файле', () => {
     expect(found?.pen).toBeCloseTo(0.25, 3)
   })
 
-  it('разные отступы у углов — это не один набор меток', () => {
+  it('different offsets at the corners are not one set of marks', () => {
     const uneven = [
       ...indesign(TRIM, 6, 15, 0.25, null).slice(0, 4),
       ...indesign(TRIM, 12, 15, 0.25, null).slice(4),
@@ -91,7 +91,7 @@ describe('метки реза в самом файле', () => {
     expect(cropMarksFrom(uneven, TRIM)).toBeNull()
   })
 
-  it('без штрихов меток нет', () => {
+  it('no strokes means no marks', () => {
     expect(cropMarksFrom([], TRIM)).toBeNull()
   })
 })

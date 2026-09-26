@@ -4,18 +4,18 @@ import type { Plan } from '../domain/plan.js'
 import type { Result } from '../domain/result.js'
 
 /**
- * Дескриптор открытого документа. `origin` помечает читателя, который его выдал:
- * счётчики у разных читателей независимы, и без пометки чужой дескриптор молча
- * попал бы в чужой документ.
+ * Handle to an open document. `origin` marks the reader that issued it: each reader
+ * counts independently, and without the mark a handle from another reader would
+ * silently land in the wrong document.
  */
 export type DocumentHandle = { readonly origin: string; readonly id: number }
 export type OpenedDocument = { readonly handle: DocumentHandle; readonly info: DocumentInfo }
 
 export type OpenError =
   | { readonly kind: 'NotAPdf' }
-  /** Документ под паролем, пароля ещё не спрашивали. Дескриптор уже выдан. */
+  /** Password-protected; the password hasn't been asked for yet. The handle is already issued. */
   | { readonly kind: 'PasswordRequired'; readonly handle: DocumentHandle }
-  /** Пароль не подошёл. Дескриптор прежний, попытку можно повторить. */
+  /** The password didn't match. The handle stays the same; the attempt can be repeated. */
   | { readonly kind: 'WrongPassword'; readonly handle: DocumentHandle }
   | { readonly kind: 'Unreadable'; readonly message: string }
 
@@ -25,13 +25,13 @@ export type WriteError =
 
 export type RenderError = { readonly kind: 'Failed'; readonly message: string }
 
-/** Сколько листов уже собрано из скольких. */
+/** How many sheets are assembled so far, out of how many. */
 export type Progress = (done: number, total: number) => void
 
 /**
- * Растр приведённой полосы, построчно сверху вниз, по четыре байта на пиксель.
- * `page` — размер той же полосы в пунктах: по нему пиксели кладутся в координаты
- * домена, пиксельные размеры для этого не годятся, они округлены.
+ * Raster of the normalized page, row by row from the top down, four bytes per pixel.
+ * `page` is the size of the same page in points: it is what maps the pixels into domain
+ * coordinates; the pixel dimensions won't do for that, they are rounded.
  */
 export type PageImage = {
   readonly width: number
@@ -42,9 +42,9 @@ export type PageImage = {
 
 export interface DocumentReaderPort {
   /**
-   * Открывает документ. Защищённый паролем документ тоже остаётся открытым:
-   * отказ `PasswordRequired` несёт дескриптор, с которым идут в `authenticate`.
-   * Закрывать такой документ всё равно через `close`.
+   * Opens a document. A password-protected document stays open too: the
+   * `PasswordRequired` failure carries the handle to take to `authenticate`.
+   * Such a document is still closed through `close`.
    */
   open(bytes: Uint8Array): Result<OpenedDocument, OpenError>
   authenticate(handle: DocumentHandle, password: string): Result<OpenedDocument, OpenError>
@@ -56,20 +56,20 @@ export interface ImposedWriterPort {
 }
 
 export interface PageRendererPort {
-  /** Рисует полосу так, чтобы длинная сторона растра была не больше `maxPx`. */
+  /** Renders the page so that the long side of the raster is no more than `maxPx`. */
   render(handle: DocumentHandle, pageIndex: number, maxPx: number): Result<PageImage, RenderError>
 }
 
 /**
- * Поток с движком пропал: его пересоздали по отмене (`Aborted`) или он упал сам,
- * чаще всего от нехватки памяти (`Crashed`). Открытые документы пропадают вместе
- * с ним, дескрипторы от прежнего потока новый поток не примет.
+ * The engine worker is gone: it was recreated on cancel (`Aborted`) or it crashed on its
+ * own, most often from running out of memory (`Crashed`). Open documents are lost with
+ * it; the new worker won't accept handles from the old one.
  */
 export type EngineFailure =
   | { readonly kind: 'Aborted' }
   | { readonly kind: 'Crashed'; readonly message: string }
 
-/** Те же три порта за границей потока: через неё синхронных вызовов не бывает. */
+/** The same three ports across the worker boundary: no call crosses it synchronously. */
 export interface EnginePort {
   open(bytes: Uint8Array): Promise<Result<OpenedDocument, OpenError | EngineFailure>>
   authenticate(
@@ -87,6 +87,6 @@ export interface EnginePort {
     plan: Plan,
     onProgress: Progress,
   ): Promise<Result<Uint8Array, WriteError | EngineFailure>>
-  /** Обрывает всё, что идёт в потоке. Незавершённые вызовы получают `Aborted`. */
+  /** Cuts off everything running in the worker. Pending calls get `Aborted`. */
   reset(): void
 }

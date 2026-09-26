@@ -4,7 +4,7 @@ import type { Pt } from './units.js'
 export type Cell = { readonly rect: Rect; readonly row: number; readonly col: number }
 export type Grid = { readonly rows: number; readonly cols: number; readonly cells: readonly Cell[] }
 
-/** Строит сетку ячеек. Порядок построчный, строка ноль — верх листа. */
+/** Builds the cell grid. Order is row by row; row zero is the top of the sheet. */
 export const buildGrid = (sheet: Size, rows: number, cols: number, margin: Pt, gap: Pt): Grid => {
   const cellW = (sheet.w - 2 * margin - (cols - 1) * gap) / cols
   const cellH = (sheet.h - 2 * margin - (rows - 1) * gap) / rows

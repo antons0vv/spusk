@@ -1,48 +1,49 @@
-# Известные пробелы ядра
+# Known gaps in the core
 
-Список составлен по итогам ревью ядра спуска. Ничего из перечисленного не мешает
-ядру работать, но каждый пункт стоит закрыть в подходящем месте, а не забыть.
+This list was compiled after a review of the imposition core. None of it stops the core from
+working, but each item should be closed in the right place rather than forgotten.
 
-## Интерфейс отступает от раздела 8 спеки
+## The interface departs from section 8 of the spec
 
-- Пресетов нет, единицы только миллиметры, зума превью нет.
-- Длина, отступ и толщина меток не настраиваются.
-- Масштаба как переключателя нет: полосы идут в натуральную величину, а если не влезают,
-  вписываются, и интерфейс пишет процент. При листе `auto` вписывание идёт в самый большой
-  формат. Поле по умолчанию `auto`: ровно под вылет и включённые метки.
-- Выравнивание размеров появляется строкой только у документа с разными размерами полос.
-- Меток реза в зазорах нет даже при широком зазоре. Разбор в `docs/crop-marks-research.md`
-  предлагает добавить их позже опцией.
-- Экспорт скачивается в папку загрузок браузера, а не кладётся рядом с исходником: из
-  браузера туда не дотянуться.
+- No presets, millimeters are the only unit, no preview zoom.
+- Mark length, offset and stroke weight are not configurable.
+- There is no scale switch: pages go at actual size, and if they don't fit, they are scaled to
+  fit and the interface shows the percentage. With the `auto` sheet, pages are fitted to the
+  largest format. The margin defaults to `auto`: exactly enough for the bleed and enabled marks.
+- Size alignment appears as a row only for a document with pages of different sizes.
+- There are no crop marks in gaps, even with a wide gap. The analysis in
+  `docs/crop-marks-research.md` suggests adding them later as an option.
+- The export downloads to the browser's downloads folder instead of being saved next to the
+  source: the browser can't reach there.
 
-## Не проверено
+## Not verified
 
-- Safari автоматически не проверяется: сборка WebKit в кэше Playwright не совпадает с
-  версией пакета и виснет на запуске. Проверки идут в Chrome, Safari смотрится руками.
-  Замер порога памяти по разделу 10 спеки не сделан, предупреждения о размере файла до
-  экспорта нет.
-- Копий в step and repeat не больше тысячи: план на десятки тысяч листов пересчитывается
-  на каждое нажатие клавиши и не помещается в память при экспорте. Тираж больше листа
-  печатают копиями в диалоге печати.
-- Путь падения потока от нехватки памяти проверен только отменой: `Crashed` и `Aborted`
-  идут через одно переоткрытие документа, но настоящий отказ wasm в браузере не вызывался.
+- Safari is not checked automatically: the WebKit build in the Playwright cache doesn't match
+  the package version and hangs on launch. Checks run in Chrome; Safari is checked by hand.
+  The memory threshold measurement from section 10 of the spec hasn't been done, and there is
+  no file size warning before export.
+- Step and repeat is capped at a thousand copies: a plan for tens of thousands of sheets is
+  recomputed on every keystroke and doesn't fit in memory on export. A run larger than one
+  sheet is printed as copies from the print dialog.
+- The path for a worker crash from running out of memory is tested only via cancellation:
+  `Crashed` and `Aborted` go through the same document reopening, but a real wasm failure in
+  the browser has never been triggered.
 
-## Мелкий долг интерфейса
+## Minor interface debt
 
-- Цифры у Alice старого стиля: ноль в поле ввода похож на строчную «o».
+- Alice has old-style figures: a zero in an input field looks like a lowercase “o”.
 
-## Мелкий долг
+## Minor debt
 
-- Полностью отсутствующий формат листа в исходнике даёт запасной размер, который
-  расходится с тем, что подставляет движок. Случай встречается только на битых
-  файлах, падения нет, есть смещение.
-- Дырявая ссылка в содержимом полосы даёт пустую полосу вместо отказа. Это цена
-  требования не ронять весь экспорт из-за одной пустой страницы в книге.
-- Проверяется конечность ширины и высоты обрезного формата, но не его начала.
+- A page size missing entirely from the source yields a fallback size that differs from
+  what the engine substitutes. This only happens with broken files; there is no crash,
+  but there is an offset.
+- A broken reference in a page's content yields a blank page instead of a failure. That is
+  the price of the requirement not to fail the whole export because of one blank page in a book.
+- The trim size's width and height are checked for being finite, but its origin is not.
 
-## Что теряется при спуске и это нормально
+## What gets lost in imposition, and that's fine
 
-Аннотации, ссылки, поля форм, слои и разметка доступности в готовый спуск не
-переносятся. Для спуска это ожидаемо, но стоит сказать вслух, чтобы не считали
-ошибкой. Группа прозрачности переносится: без неё уезжает цвет.
+Annotations, links, form fields, layers and accessibility tagging are not carried over into the
+finished imposition. For imposition this is expected, but it's worth saying out loud so nobody
+takes it for a bug. The transparency group is carried over: without it, the color shifts.

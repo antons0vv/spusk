@@ -44,7 +44,7 @@ export const DropScreen = ({
           }}
         >
           <input
-            // biome-ignore lint/a11y/noAutofocus: пароль — единственное, что можно сделать на этом экране
+            // biome-ignore lint/a11y/noAutofocus: the password is all there is to do on this screen
             autoFocus
             type="password"
             aria-label="password"

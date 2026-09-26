@@ -22,11 +22,11 @@ const bookletJob = (): Job => ({
 
 const imposedFrom = (source: Uint8Array, job: Job): Uint8Array => {
   const opened = reader.open(source)
-  if (!isOk(opened)) throw new Error('документ не открылся')
+  if (!isOk(opened)) throw new Error('document did not open')
   const built = plan(job, opened.value.info)
-  if (!isOk(built)) throw new Error(`план не построен: ${JSON.stringify(built.error)}`)
+  if (!isOk(built)) throw new Error(`plan not built: ${JSON.stringify(built.error)}`)
   const written = writer.write(opened.value.handle, built.value)
-  if (!isOk(written)) throw new Error(`файл не записан: ${JSON.stringify(written.error)}`)
+  if (!isOk(written)) throw new Error(`file not written: ${JSON.stringify(written.error)}`)
   reader.close(opened.value.handle)
   return written.value
 }
@@ -38,7 +38,7 @@ const imposed = (
 ): Uint8Array =>
   imposedFrom(makeNumberedPdf({ pageCount, width: 419.53, height: 595.28, ...extra }), job)
 
-/** Одна полоса на лист в натуральную величину: положение метки читается напрямую. */
+/** One page per sheet at actual size: a label position reads directly. */
 const oneToOne = (sheet: Size): Job => ({
   scheme: { kind: 'nup', rows: 1, cols: 1, fill: 'rows' },
   sheet: { size: sheet, margin: pt(0), gap: pt(0) },
@@ -48,57 +48,57 @@ const oneToOne = (sheet: Size): Job => ({
 
 const labelAt = (bytes: Uint8Array, text: string): Label => {
   const first = readBack(bytes)[0]
-  if (first === undefined) throw new Error('нет листа')
+  if (first === undefined) throw new Error('no sheet')
   const found = first.labels.find((l) => l.text === text)
-  if (found === undefined) throw new Error(`нет метки ${text}`)
+  if (found === undefined) throw new Error(`no label ${text}`)
   return found
 }
 
-describe('писатель', () => {
-  it('брошюра из 16 полос кладёт полосы в правильные ячейки', () => {
+describe('writer', () => {
+  it('a 16-page booklet puts the pages in the right cells', () => {
     const sheets = readBack(imposed(16, bookletJob()))
     expect(sheets).toHaveLength(8)
     const first = sheets[0]
     const second = sheets[1]
-    if (first === undefined || second === undefined) throw new Error('нет листов')
+    if (first === undefined || second === undefined) throw new Error('no sheets')
     expect(cellOf(first, 1, 2, 'bottom-P16')).toEqual({ row: 0, col: 0 })
     expect(cellOf(first, 1, 2, 'bottom-P1')).toEqual({ row: 0, col: 1 })
     expect(cellOf(second, 1, 2, 'bottom-P2')).toEqual({ row: 0, col: 0 })
     expect(cellOf(second, 1, 2, 'bottom-P15')).toEqual({ row: 0, col: 1 })
   })
 
-  it('размер листа соответствует плану', () => {
+  it('sheet size matches the plan', () => {
     const sheets = readBack(imposed(4, bookletJob()))
     expect(sheets[0]?.width).toBeCloseTo(841.89, 2)
     expect(sheets[0]?.height).toBeCloseTo(595.28, 2)
   })
 
-  it('cut and stack раскладывает по стопкам', () => {
+  it('cut and stack lays pages out in stacks', () => {
     const job: Job = {
       ...bookletJob(),
       scheme: { kind: 'cutStack', rows: 2, cols: 2 },
       sheet: { size: size(841.89, 1190.55), margin: pt(0), gap: pt(0) },
-      // Ячейка A3/4 по высоте на доли пункта меньше полосы A5, поэтому вписываем.
+      // An A3/4 cell is a fraction of a point shorter than an A5 page, so the page is fitted.
       source: { bleed: pt(0), scaling: 'fit', normalizeSizes: false },
     }
     const sheets = readBack(imposed(16, job))
     const first = sheets[0]
-    if (first === undefined) throw new Error('нет листа')
+    if (first === undefined) throw new Error('no sheet')
     expect(cellOf(first, 2, 2, 'bottom-P1')).toEqual({ row: 0, col: 0 })
     expect(cellOf(first, 2, 2, 'bottom-P5')).toEqual({ row: 0, col: 1 })
     expect(cellOf(first, 2, 2, 'bottom-P9')).toEqual({ row: 1, col: 0 })
     expect(cellOf(first, 2, 2, 'bottom-P13')).toEqual({ row: 1, col: 1 })
   })
 
-  it('полоса со смещённым началом координат ложится в свою ячейку', () => {
+  it('a page with an offset origin lands in its own cell', () => {
     const sheets = readBack(imposed(4, bookletJob(), { origin: 40 }))
     const first = sheets[0]
-    if (first === undefined) throw new Error('нет листа')
+    if (first === undefined) throw new Error('no sheet')
     expect(cellOf(first, 1, 2, 'bottom-P4')).toEqual({ row: 0, col: 0 })
     expect(cellOf(first, 1, 2, 'bottom-P1')).toEqual({ row: 0, col: 1 })
   })
 
-  it('повёрнутая полоса ложится повёрнутой, а не как есть', () => {
+  it('a rotated page is placed rotated, not as is', () => {
     const job: Job = {
       ...bookletJob(),
       sheet: { size: size(1190.55, 841.89), margin: pt(0), gap: pt(0) },
@@ -106,14 +106,15 @@ describe('писатель', () => {
     }
     const sheets = readBack(imposed(4, job, { rotate: 90 }))
     const first = sheets[0]
-    if (first === undefined) throw new Error('нет листа')
+    if (first === undefined) throw new Error('no sheet')
     expect(cellOf(first, 1, 2, 'bottom-P4')).toEqual({ row: 0, col: 0 })
-    // Метка низа полосы после поворота по часовой стрелке оказывается вверху листа.
-    // Без поворота она осталась бы внизу, поэтому строка здесь и различает случаи.
+    // After a clockwise rotation the label at the bottom of the page ends up at the top of
+    // the sheet. Without rotation it would stay at the bottom, so the row is what tells the
+    // cases apart here.
     expect(cellOf(first, 2, 2, 'bottom-P4')).toEqual({ row: 0, col: 0 })
   })
 
-  it('вылет обрезается по границе клипа', () => {
+  it('bleed is cut at the clip boundary', () => {
     const job: Job = {
       ...bookletJob(),
       sheet: { size: size(841.89, 595.28), margin: mm(5), gap: pt(0) },
@@ -124,7 +125,7 @@ describe('писатель', () => {
     expect(readBack(bytes)).toHaveLength(2)
   })
 
-  it('полоса с кропбоксом ложится по кропбоксу, а спрятанное им содержимое не печатается', () => {
+  it('a page with a CropBox is placed by its CropBox, and content it hides is not printed', () => {
     const crop = { left: 8, bottom: 10, right: 6, top: 4 }
     const plain = imposedFrom(
       makeNumberedPdf({ pageCount: 1, width: 300, height: 400 }),
@@ -132,21 +133,21 @@ describe('писатель', () => {
     )
     const cropped = imposedFrom(
       makeNumberedPdf({ pageCount: 1, width: 300, height: 400, crop }),
-      // Лист ровно по кропбоксу: полоса ложится в него один к одному.
+      // Sheet exactly the size of the CropBox: the page goes into it one to one.
       oneToOne(size(300 - crop.left - crop.right, 400 - crop.bottom - crop.top)),
     )
     const before = labelAt(plain, 'bottom-P1')
     const after = labelAt(cropped, 'bottom-P1')
-    // Отсчёт идёт от начала кропбокса, поэтому метка смещается ровно на его отступы.
+    // Positions count from the CropBox origin, so the label shifts by exactly its offsets.
     expect(after.x).toBeCloseTo(before.x - crop.left, 2)
     expect(after.y).toBeCloseTo(before.y - crop.top, 2)
     const sheet = readBack(cropped)[0]
     expect(sheet?.labels.some((l) => l.text.startsWith('outside-'))).toBe(false)
   })
 
-  it('вылет внутри кропбокса не сдвигает полосу по вертикали', () => {
-    // TrimBox сидит в кропбоксе несимметрично: снизу восемь пунктов, сверху два.
-    // Полоса всё равно обязана лечь по линии реза, как будто коробок нет вовсе.
+  it('bleed inside the CropBox does not shift the page vertically', () => {
+    // The TrimBox sits asymmetrically in the CropBox: eight points at the bottom, two at
+    // the top. The page must still land on the trim line, as if there were no boxes at all.
     const source = makeNumberedPdf({
       pageCount: 1,
       width: 300,
@@ -165,7 +166,7 @@ describe('писатель', () => {
     expect(after.y).toBeCloseTo(before.y, 2)
   })
 
-  it('полоса без потока содержимого не роняет экспорт', () => {
+  it('a page without a content stream does not crash the export', () => {
     const source = makeNumberedPdf({
       pageCount: 4,
       width: 419.53,
@@ -176,15 +177,15 @@ describe('писатель', () => {
     expect(sheets).toHaveLength(2)
     const first = sheets[0]
     const second = sheets[1]
-    if (first === undefined || second === undefined) throw new Error('нет листов')
+    if (first === undefined || second === undefined) throw new Error('no sheets')
     expect(cellOf(first, 1, 2, 'bottom-P4')).toEqual({ row: 0, col: 0 })
     expect(cellOf(first, 1, 2, 'bottom-P1')).toEqual({ row: 0, col: 1 })
-    // Пустая полоса лежит слева и ничего не печатает, соседняя ложится как обычно.
+    // The blank page sits on the left and prints nothing; its neighbor is placed as usual.
     expect(cellOf(second, 1, 2, 'bottom-P3')).toEqual({ row: 0, col: 1 })
     expect(cellOf(second, 1, 2, 'bottom-P2')).toBeNull()
   })
 
-  it('содержимое из двух потоков склеивается целиком', () => {
+  it('content split across two streams is joined in full', () => {
     const source = makeNumberedPdf({
       pageCount: 4,
       width: 419.53,
@@ -200,15 +201,15 @@ describe('писатель', () => {
     const sheets = readBack(imposedFrom(source, job))
     expect(sheets).toHaveLength(2)
     const first = sheets[0]
-    if (first === undefined) throw new Error('нет листа')
-    // Крупная метка лежит в первом потоке, угловые — во втором.
+    if (first === undefined) throw new Error('no sheet')
+    // The large label is in the first stream, the corner ones in the second.
     expect(first.labels.some((l) => l.text === 'P4')).toBe(true)
     expect(cellOf(first, 1, 2, 'bottom-P4')).toEqual({ row: 0, col: 0 })
     expect(cellOf(first, 1, 2, 'top-P4')).toEqual({ row: 0, col: 0 })
     expect(cellOf(first, 1, 2, 'bottom-P1')).toEqual({ row: 0, col: 1 })
   })
 
-  it('группа прозрачности переносится в форму', () => {
+  it('the transparency group is carried into the form', () => {
     const source = makeNumberedPdf({
       pageCount: 4,
       width: 419.53,
@@ -217,33 +218,33 @@ describe('писатель', () => {
     })
     const out = imposedFrom(source, bookletJob())
     const opened = mupdf.Document.openDocument(out, 'application/pdf').asPDF()
-    if (opened === null) throw new Error('результат не PDF')
-    // Сужение до PDF, иначе тип полосы остаётся общим и словаря у неё нет.
+    if (opened === null) throw new Error('result is not a PDF')
+    // Narrow to PDF; otherwise the page type stays generic and has no dictionary.
     const doc: mupdf.PDFDocument = opened
     const forms = doc.loadPage(0).getObject().get('Resources').get('XObject')
     const kinds: string[] = []
     forms.forEach((form) => {
       const kind = form.resolve().get('Group').resolve().get('S')
-      kinds.push(kind.isName() ? kind.asName() : 'нет группы')
+      kinds.push(kind.isName() ? kind.asName() : 'no group')
     })
     doc.destroy()
     expect(kinds).toHaveLength(2)
     expect(new Set(kinds)).toEqual(new Set(['Transparency']))
   })
 
-  it('дескриптор чужого читателя не даёт собрать файл', () => {
+  it('a handle from another reader cannot build a file', () => {
     const other = new MupdfReader()
     const opened = other.open(makeNumberedPdf({ pageCount: 4, width: 300, height: 400 }))
-    if (!isOk(opened)) throw new Error('документ не открылся')
+    if (!isOk(opened)) throw new Error('document did not open')
     const built = plan(oneToOne(size(300, 400)), opened.value.info)
-    if (!isOk(built)) throw new Error('план не построен')
-    // Писатель связан с другим читателем: чужой номер документа он брать не должен.
+    if (!isOk(built)) throw new Error('plan not built')
+    // The writer is bound to another reader: it must not accept a foreign document number.
     const written = writer.write(opened.value.handle, built.value)
     expect(isErr(written)).toBe(true)
     other.close(opened.value.handle)
   })
 
-  it('метки реза попадают в файл и не ломают его', () => {
+  it('crop marks reach the file and do not break it', () => {
     const job: Job = {
       ...bookletJob(),
       sheet: { size: size(841.89, 595.28), margin: mm(10), gap: pt(0) },

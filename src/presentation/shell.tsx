@@ -2,9 +2,9 @@ import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
 import { CutMarks, TRIM } from './crop-marks.js'
 
 /**
- * Каркас всех экранов: боковая колонка слева, рабочее поле справа. Ширина колонки
- * постоянная, чтобы метка реза между ними не прыгала при смене экрана. Внизу колонки
- * действия, сверху её содержимое прокручивается само.
+ * Shell of every screen: sidebar on the left, workspace on the right. The sidebar width is
+ * fixed so that the crop mark between them doesn't jump when the screen changes. Actions sit
+ * at the bottom of the sidebar; its content above scrolls on its own.
  */
 export const Shell = ({
   sidebar,

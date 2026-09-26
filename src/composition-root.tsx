@@ -5,7 +5,7 @@ import { App } from './presentation/app.js'
 import { createAppStore } from './presentation/store.js'
 import './presentation/styles.css'
 
-/** Единственное место, где интерфейс встречается с движком. */
+/** The only place where the interface meets the engine. */
 const engine = createWorkerEngine(
   () =>
     new Worker(new URL('./infrastructure/worker/engine.worker.ts', import.meta.url), {
@@ -14,7 +14,7 @@ const engine = createWorkerEngine(
 )
 
 const root = document.getElementById('root')
-if (root === null) throw new Error('в index.html нет #root')
+if (root === null) throw new Error('index.html has no #root')
 
 createRoot(root).render(
   <StrictMode>

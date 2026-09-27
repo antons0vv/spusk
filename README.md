@@ -1,33 +1,25 @@
 # spusk
 
-A browser-based imposition tool. Everything is computed on the client: the file never goes to a
-server, and there is no telemetry or analytics on top of user data.
+A browser-based imposition tool. Everything is computed on the client: the file never goes to a server, and there is no telemetry or analytics on top of user data.
 
 Live at https://tools.volnenko.com.
 
 ## Why
 
-macOS has no free imposition tool with a user interface. Quite Imposing Plus costs about a
-thousand dollars and needs Acrobat Pro on top. Browser-based services choke on files of tens of
-megabytes. Command-line tools like `paperjam` and `pdfcpu` compute the geometry for free and
-accurately, but show no preview and leave creep and cut-and-stack to be worked out by hand.
+macOS has no free imposition tool with a user interface. Quite Imposing Plus costs about a thousand dollars and needs Acrobat Pro on top. Command-line tools like `paperjam` and `pdfcpu` compute the geometry for free and accurately, but show no preview and leave creep and cut-and-stack to be worked out by hand.
 
 ## What's ready
 
-The imposition core and an interface for it: drop a PDF into the window, pick a scheme, look
-through the sheets, download the finished imposition.
+The imposition core and an interface for it: drop a PDF into the window, pick a scheme, look through the sheets, download the finished imposition.
 
-- Four schemes: saddle-stitch booklet with signatures and creep, n-up, step and repeat,
-  cut and stack.
+- Four schemes: saddle-stitch booklet with signatures and creep, n-up, step and repeat, cut and stack.
 - Margins, gaps and bleed. Effective bleed is computed for each edge of a page separately:
   next to a neighboring cell the limit is half the gap, at the sheet edge it is the sheet margin.
 - Crop, fold and registration marks.
 - Scale “as is” or “fit to cell”, alignment of pages of different sizes.
-- Reading the source with CropBox, TrimBox and page rotation taken into account; writing sheets
-  by carrying pages over as form XObjects through a shared graft map.
+- Reading the source with CropBox, TrimBox and page rotation taken into account; writing sheets by carrying pages over as form XObjects through a shared graft map.
 
-The layout plan is data: the preview and the writer receive the same structure, so the screen
-and the file cannot diverge. Failures are returned as values, not exceptions.
+The layout plan is data: the preview and the writer receive the same structure, so the screen and the file cannot diverge. Failures are returned as values, not exceptions.
 
 ## Structure
 
@@ -51,8 +43,7 @@ bun run check       # lint and format
 bun run deploy      # build and deploy to tools.volnenko.com
 ```
 
-Tests don't touch the network: source PDFs are built in code, and the result is read back by the
-engine and checked against the physical coordinates of pages and marks.
+Tests don't touch the network: source PDFs are built in code, and the result is read back by the engine and checked against the physical coordinates of pages and marks.
 
 ## License
 

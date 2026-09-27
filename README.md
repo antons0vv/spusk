@@ -6,7 +6,7 @@ Live at https://tools.volnenko.com.
 
 ## Why
 
-macOS has no free imposition tool with a user interface. Quite Imposing Plus costs about a thousand dollars and needs Acrobat Pro on top. Command-line tools like `paperjam` and `pdfcpu` compute the geometry for free and accurately, but show no preview and leave creep and cut-and-stack to be worked out by hand.
+Preparing zine and book files for print is often a headache due to the lack of free, user-friendly imposition software. Quite Imposing Plus costs around $1,000 alongside an Acrobat Pro subscription. Free command-line options like ⁠paperjam⁠ and ⁠pdfcpu⁠ handle geometry well, but offer no visual preview and require manual setup for creep and cut-and-stack.
 
 ## What's ready
 
